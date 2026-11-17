@@ -104,3 +104,53 @@ in an external agent-messaging transport means implementing `send` and `inbox`.
   work inside a run, it does not decide the graph.
 - no vector store. shared context is key-value with full history, which is enough
   until a crew's context stops fitting in a prompt.
+
+## spawn kinds: subagent and sidecar
+
+the first version had one kind of spawn and called it a subagent. the owner pointed out
+that a fleet has two useful shapes and only one of them is a subagent: sometimes you want
+another principal with its own lane and its own record, and sometimes you want a second
+pair of eyes inside the run you are already making.
+
+the split is a column (`agent_spawns.relation`) and a set of refusals, not a naming
+convention. a sidecar always names a card, is capped at two per card, gets no permissions
+of its own, may not be handed a card to own (the runner refuses it at dispatch), and is
+retired when its run ends, whichever way it ends. a subagent keeps everything it had.
+
+the thing worth remembering is why this is a column: a sidecar that acquires authority is
+a subagent with a new name, and a subagent that loses its lineage is an agent nobody can
+account for. the schema is where that stays true.
+
+## loops, and the engine that learns from them
+
+a flat dag cannot say "try again". a node succeeds or the run fails, and a run that failed
+on attempt two of five looks exactly like a run that failed on attempt one. so workflows
+gained a `loop` node: a body of node ids, a ceiling (1 to 20, enforced at save time), and
+a condition that ends the loop early. body nodes declare `"loop": "<id>"` and are skipped
+by the main pass, so the loop owns them and a card is not dispatched twice by accident.
+each attempt resets its body, because keeping the previous outcome would make attempt two
+a continuation of attempt one, which is how a loop claims convergence it did not reach.
+a human gate inside a loop is refused at save time: a loop that stops for a person is a
+workflow with a person in it, and the gate belongs outside.
+
+the improvement engine is on the other side of that node. an exhausted loop is the only
+place in the tree that knows the work did not converge, which is the one thing worth
+learning from it, so it files a lesson: proposed, attributed to the agent whose work fell
+short (from the card, then from the run, then from the node's named agent), with the
+workflow run named in the statement. an `improve` node does the same deliberately at a
+point the author chooses. neither can promote anything: promotion is `manage/lessons.py`
+and a person walks it. that asymmetry is the whole safety argument, because an engine that
+writes its own instructions is the failure mode self improvement is meant to avoid.
+
+## context as slices
+
+before this, a run got whatever the prompt builder happened to concatenate, and the answer
+to "what was this agent told" was a code path. now context is eight named slices with
+character budgets (intent, knowledge, lessons, task, board, inbox, failures, crew), chosen
+in a fixed order, with an agent able to ask for fewer via `scope.context` and nobody able
+to ask for more than the budget. the ellipsis counts against the budget, because a slice
+that reports 904 characters against a 900 budget is a budget that is not one.
+
+every assembly writes a row in `context_snapshots` with the slice names, per slice counts
+and what was truncated. that row is what the runs view shows and what a question about a
+bad run is answered from. a prompt nobody kept is a claim about a run, not a record of it.

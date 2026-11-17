@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 SCHEMA = """
 create table if not exists meta (
@@ -362,11 +362,30 @@ create table if not exists agent_spawns (
     parent_agent_id text not null references agents(id) on delete cascade,
     child_agent_id text not null references agents(id) on delete cascade,
     mode text not null default 'ephemeral',
+    -- child: a principal of its own, with a lineage the parent signed.
+    -- sidecar: a helper attached to one card, with no lineage of its own.
+    relation text not null default 'child',
     task_id text,
     status text not null default 'active',
     created_date real not null,
     retired_date real
 );
+
+-- what one agent was actually handed for one run. a prompt is a slice of the crew's
+-- working context, and a slice nobody can read back is a claim about a run rather
+-- than a record of it.
+create table if not exists context_snapshots (
+    id text primary key,
+    team_id text not null,
+    agent_id text not null references agents(id) on delete cascade,
+    task_id text not null default '',
+    run_id text not null default '',
+    needs text not null default '[]',
+    slices text not null default '[]',
+    chars integer not null default 0,
+    created_date real not null
+);
+create index if not exists context_snapshots_agent on context_snapshots (agent_id, created_date);
 create index if not exists agent_spawns_parent on agent_spawns (parent_agent_id, status);
 
 create table if not exists job_queue (
@@ -765,6 +784,9 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
         "parent_agentid": "text",
         "fan_out": "integer not null default 0",
         "nonce": "text",
+        # v11: a spawn is a child (a lineage the parent signs) or a sidecar (a helper
+        # beside one card). rows written before that read back as children.
+        "relation": "text not null default 'child'",
     },
     # signatures on the provenance chain
     "agent_audit": {
@@ -782,6 +804,8 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
 }
 
 LATER_INDEXES = (
+    # needs `relation`, which only exists after _add_columns on a db older than v11
+    "create index if not exists agent_spawns_task on agent_spawns (task_id, relation, status)",
     "create index if not exists tasks_channel on tasks (channel_id, column_name)",
     "create unique index if not exists agents_key on agents (agent_key)",
     "create unique index if not exists agents_agentid on agents (agentid)",

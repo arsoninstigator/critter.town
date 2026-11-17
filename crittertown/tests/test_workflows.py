@@ -45,7 +45,8 @@ class ValidationTests(AppCase):
         allowed = ctx.exception.details["allowed"]
         self.assertEqual(
             allowed,
-            ["agent_task", "branch", "dify", "human_gate", "n8n", "set_context", "shell"],
+            ["agent_task", "branch", "dify", "human_gate", "improve", "loop", "n8n",
+             "set_context", "shell"],
         )
 
     def test_duplicate_ids_rejected(self):

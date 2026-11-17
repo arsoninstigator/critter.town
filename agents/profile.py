@@ -68,6 +68,13 @@ DEFAULT_PERMISSIONS = {
 # a freshly spawned child can do almost nothing until someone says otherwise.
 CHILD_PERMISSIONS = {key: False for key in DEFAULT_PERMISSIONS}
 
+# a sidecar is a helper beside an agent, not a junior agent below it. it gets no
+# permissions of its own because everything it does is done inside the parent's run and
+# lands in the parent's record. what it gets instead is the parent's working context.
+SIDECAR_PERMISSIONS = {key: False for key in DEFAULT_PERMISSIONS}
+RELATIONS = ("child", "sidecar")
+SIDECARS_PER_TASK = 2
+
 SPAWN_DEFAULTS = {
     "enabled": False,
     "mode": "ephemeral",
@@ -449,6 +456,7 @@ class ProfileService:
         nonce: str = "",
         specializations: list[str] | None = None,
         persistence: str | None = None,
+        relation: str = "child",
     ) -> dict:
         """a child agent, with a profile of its own and none of the parent's access.
 
@@ -459,7 +467,26 @@ class ProfileService:
         """
         if self.crews is None:
             raise ValidationError("spawning needs the crew service")
+        if relation not in RELATIONS:
+            raise ValidationError(f"relation must be one of {list(RELATIONS)}")
         parent = self.crews.get_agent(parent_agent_id)
+        if relation == "sidecar":
+            # a sidecar is beside a card, so there has to be a card
+            if not task_id:
+                raise ValidationError(
+                    "a sidecar works on one task; pass the task it sits beside"
+                )
+            active_sidecars = self.store.one(
+                """select count(*) as c from agent_spawns
+                   where parent_agent_id = ? and task_id = ? and relation = 'sidecar'
+                     and status = 'active'""",
+                (parent_agent_id, task_id),
+            )
+            if int(active_sidecars["c"]) >= SIDECARS_PER_TASK:
+                raise Conflict(
+                    f"{parent['name']} already has {active_sidecars['c']} sidecar(s) on "
+                    f"that card; limit is {SIDECARS_PER_TASK}"
+                )
         policy = self.spawn_policy(parent_agent_id)
         if not policy["enabled"]:
             raise NotAllowed("this agent is not allowed to spawn subagents")
@@ -487,8 +514,14 @@ class ProfileService:
             name,
             role=role,
             scope={
-                "permissions": dict(CHILD_PERMISSIONS),
-                "instructions": f"subagent of {parent['name']}",
+                "permissions": dict(
+                    SIDECAR_PERMISSIONS if relation == "sidecar" else CHILD_PERMISSIONS
+                ),
+                "instructions": (
+                    f"sidecar of {parent['name']} on task {task_id}"
+                    if relation == "sidecar"
+                    else f"subagent of {parent['name']}"
+                ),
                 "data_scope": "agent",
             },
             specializations=specializations or [],
@@ -517,11 +550,12 @@ class ProfileService:
         with self.store.tx() as c:
             c.execute(
                 """insert into agent_spawns
-                   (id, team_id, parent_agent_id, child_agent_id, mode, task_id, status,
-                    subagent_id, parent_agentid, fan_out, nonce, created_date)
-                   values (?,?,?,?,?,?, 'active', ?,?,?,?,?)""",
-                (spawn_id, parent["team_id"], parent_agent_id, child["id"], chosen, task_id,
-                 subagent_id, parent_identity["agentid"], int(index), lane_nonce, now()),
+                   (id, team_id, parent_agent_id, child_agent_id, mode, relation, task_id,
+                    status, subagent_id, parent_agentid, fan_out, nonce, created_date)
+                   values (?,?,?,?,?,?,?, 'active', ?,?,?,?,?)""",
+                (spawn_id, parent["team_id"], parent_agent_id, child["id"], chosen, relation,
+                 task_id, subagent_id, parent_identity["agentid"], int(index), lane_nonce,
+                 now()),
             )
         if self.audit is not None:
             self.audit.record(
@@ -692,6 +726,64 @@ class ProfileService:
             )
             cursor = row["parent_agent_id"]
         return chain
+
+    def relation_of(self, agent_id: str) -> str:
+        """child, sidecar, or "self" for an agent nobody spawned.
+
+        the board and the runner both ask this: a sidecar may not hold a card, and an
+        agent with no spawn row is a full principal in its own right.
+        """
+        row = self.store.one(
+            """select relation from agent_spawns
+               where child_agent_id = ? and status = 'active'
+               order by created_date desc limit 1""",
+            (agent_id,),
+        )
+        return (row["relation"] if row else "") or "self"
+
+    def sidecars(self, task_id: str = "", agent_id: str = "") -> list[dict]:
+        """the helpers currently beside a card, or beside every card one agent holds."""
+        clause, params = "", []
+        if task_id:
+            clause += " and task_id = ?"
+            params.append(task_id)
+        if agent_id:
+            clause += " and parent_agent_id = ?"
+            params.append(agent_id)
+        rows = self.store.query(
+            f"""select * from agent_spawns
+                where relation = 'sidecar' and status = 'active'{clause}
+                order by created_date""",
+            tuple(params),
+        )
+        out = []
+        for row in rows:
+            child = self.store.one("select id, name, role, status from agents where id = ?",
+                                   (row["child_agent_id"],))
+            out.append({
+                "id": row["id"],
+                "agent_id": row["child_agent_id"],
+                "parent_agent_id": row["parent_agent_id"],
+                "task_id": row["task_id"] or "",
+                "name": child["name"] if child else "",
+                "role": child["role"] if child else "",
+                "status": child["status"] if child else "",
+                "created_date": row["created_date"],
+            })
+        return out
+
+    def retire_sidecars(self, task_id: str) -> list[str]:
+        """a sidecar lives as long as the card does. closing the card closes them.
+
+        called when a card settles, because a helper that outlives its task is an agent
+        nobody assigned to anything, which is the state this tree spends its time
+        avoiding.
+        """
+        retired = []
+        for sidecar in self.sidecars(task_id=task_id):
+            self.retire(sidecar["agent_id"], reason="task closed")
+            retired.append(sidecar["agent_id"])
+        return retired
 
     def retire(self, child_agent_id: str, reason: str = "") -> dict:
         with self.store.tx() as c:

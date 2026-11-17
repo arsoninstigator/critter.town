@@ -122,6 +122,19 @@ curl -X POST localhost:8000/agents/$AGENT/vault -H 'content-type: application/js
 - revoking writes a row and an audit entry (`vault.revoked`). the grant history is the
   point: an audit trail that deletes itself is not one
 
+### sidecars, and what an agent was handed
+
+- `POST /agents/{id}/sidecars` spawns a helper beside one card (`task_id` required).
+  `GET /agents/{id}/sidecars` and `GET /tasks/{id}/sidecars` read them back; both list
+  only active ones, because a retired sidecar is a row and a row is not a helper
+- `GET /agents/{id}/context` returns the last snapshots, the slices the agent currently
+  asks for, and the budgets; `POST /agents/{id}/context/preview` assembles a snapshot
+  without storing it, which is how an operator checks the budget before a run rather
+  than after one
+- `GET /agents/{id}/child` is unchanged: a sidecar is not in it. the relation is in
+  `agent_spawns.relation`, and `GET /agents/{id}/lineage` does not walk through a
+  sidecar, because a sidecar has no lane of its own to walk
+
 ### how the env reaches the sandbox
 
 two paths, chosen by the provider, and the difference is a credential's safety rather than

@@ -25,7 +25,7 @@ from comms.a2a import A2AService
 from core.config import Settings
 from agents.crews import CrewService
 from core.db import Store, dumps, loads, new_id, now
-from core.errors import CritterTownError, NotFound, ValidationError
+from core.errors import CritterTownError, NotAllowed, NotFound, ValidationError
 from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.runtime import AgentModel, build_model, render_prompt
 from sandbox import Handle, ProviderRegistry
@@ -41,6 +41,7 @@ class CrewRunner:
         model: AgentModel | None = None,
         intent=None,
         guardrails=None,
+        profile=None,
     ):
         self.store = store
         self.registry = registry
@@ -51,7 +52,10 @@ class CrewRunner:
         # set by the composition root: the standing limits, checked before a card
         # is allowed to become work
         self.guardrails = guardrails
+        self.profile = profile
         self.knowledge = None
+        # set by the composition root: the prompt is assembled from slices
+        self.context = None
         self.crews = CrewService(store, registry)
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
@@ -125,6 +129,13 @@ class CrewRunner:
         if self.guardrails is not None:
             self.guardrails.enforce(task["team_id"], "dispatch", {}, task=task)
         agent = self.pick_agent(task["team_id"], task)
+        if self.profile is not None and self.profile.relation_of(agent["id"]) == "sidecar":
+            # a sidecar works beside a card, inside its parent's run. giving it one of
+            # its own would make it a child agent with a child's paperwork and none of
+            # a child's lineage, which is the confusion this split exists to end.
+            raise NotAllowed(
+                f"{agent['name']} is a sidecar on another card; a sidecar cannot own one"
+            )
         if self.guardrails is not None:
             self.guardrails.enforce(
                 task["team_id"], "dispatch",
@@ -147,13 +158,23 @@ class CrewRunner:
             inbox = self.a2a.inbox(agent["id"], limit=10)
             context = self.crews.context(task["team_id"])["values"]
             intent_block = self.intent.prompt(team["id"], agent["id"]) if self.intent else ""
+            # one assembly, recorded: what this agent was handed for this run, as slices.
+            # the knowledge block lives inside it now, so nothing is said twice.
+            snapshot = None
+            if self.context is not None:
+                try:
+                    snapshot = self.context.compose(
+                        agent["id"], task_id=task_id, run_id=run_id
+                    )
+                except CritterTownError:
+                    snapshot = None
             prompt = render_prompt(
                 task, agent, team, context, inbox,
                 intent=intent_block,
-                knowledge=(
+                knowledge=(snapshot["block"] if snapshot else (
                     self.knowledge.for_prompt(team["id"], agent["id"])
                     if self.knowledge is not None else ""
-                ),
+                )),
             )
             system_prompt = agent["system_prompt"] or (
                 f"you are {agent['name']}, {agent['role'] or 'a member'} of the {team['name']} crew."
@@ -185,6 +206,7 @@ class CrewRunner:
             error = f"{exc.code}: {exc.message}"
             self._update_run(run_id, steps, status="failed", error=error)
             self.kanban.move(task_id, "blocked", agent["id"], note=error[:500])
+            self._retire_sidecars(task_id)
             if self.events_hook is not None:
                 self.events_hook("run.failed", {
                     "team_id": task["team_id"], "task_id": task_id, "run_id": run_id,
@@ -198,6 +220,10 @@ class CrewRunner:
                     provider.destroy(handle)
                 except CritterTownError:
                     pass
+            # a sidecar exists for one run of one card. when the run ends, whichever way
+            # it ends, the helper's job is done, and a helper that outlives its run is an
+            # agent nobody assigned to anything.
+            self._retire_sidecars(task_id)
 
         self._update_run(run_id, steps, status="succeeded")
         self.crews.update_agent(agent["id"], status="idle")
@@ -263,6 +289,14 @@ class CrewRunner:
         return provider, Handle.from_dict(computer["handle"])
 
     # ---- runs ----------------------------------------------------------
+    def _retire_sidecars(self, task_id: str) -> None:
+        if self.profile is None:
+            return
+        try:
+            self.profile.retire_sidecars(task_id)
+        except CritterTownError:
+            pass
+
     def _insert_run(self, run_id: str, task: dict, agent: dict, provider: str, sandbox: str) -> None:
         with self.store.tx() as c:
             c.execute(
