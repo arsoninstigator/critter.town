@@ -156,6 +156,25 @@ dify.
 
 ## internal vocabulary
 
+### sidecar
+a helper beside a card, not a junior agent below one. a subagent is a principal with a
+lineage its parent signed; a sidecar works inside its parent's run, holds no permission
+of its own, may not own a card, and stops existing when that run ends. it exists because
+"go and look at this while i work" is a different request from "you are now responsible
+for this", and conflating them gives you agents with paperwork but no accountability.
+
+### slice
+one named part of a crew's working context, with a character budget: intent, knowledge,
+lessons, task, board, inbox, failures, crew. an agent receives a set of slices, may ask
+for fewer in `scope.context`, and the assembly is recorded as a snapshot. context is a
+budget, not a dump.
+
+### snapshot
+the row in `context_snapshots` that records what one agent was handed for one run: which
+slices, how many characters each, and what was truncated. it exists so "what was it told
+when it did that" is a lookup rather than an inference from a prompt nobody kept.
+
+
 ### the town
 the ecosystem is the town. `critter.town` is the repository, `crittertown` is the
 distribution, the cli and the env prefix (`CRITTERTOWN_*`), `crittertown.db` is the file.

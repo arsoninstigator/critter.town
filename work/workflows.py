@@ -30,13 +30,14 @@ from typing import Any
 from comms.a2a import A2AService
 from agents.crews import CrewService
 from core.db import Store, dumps, loads, new_id, now
-from core.errors import NotFound, ValidationError
+from core.errors import CritterTownError, NotFound, ValidationError
 from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.orchestrator import CrewRunner
 from sandbox import Handle
 from core.services import build_services
 
-NODE_TYPES = {"agent_task", "shell", "set_context", "human_gate", "branch", "n8n", "dify"}
+NODE_TYPES = {"agent_task", "shell", "set_context", "human_gate", "branch", "n8n",
+              "dify", "loop", "improve"}
 
 # draft: a human sketch. proposed: handed in by agents, waiting on approval.
 # active: runs. archived: kept, never runs.
@@ -81,6 +82,33 @@ def validate_definition(definition: Any) -> dict:
             raise ValidationError(f"agent_task '{node['id']}' needs a title or instruction")
         if node["type"] == "shell" and not node.get("command"):
             raise ValidationError(f"shell node '{node['id']}' needs a command")
+        if node["type"] == "loop":
+            body = node.get("body") or []
+            if not isinstance(body, list) or not body:
+                raise ValidationError(f"loop '{node['id']}' needs a body: the node ids it repeats")
+            for member in body:
+                if member not in ids:
+                    raise ValidationError(f"loop '{node['id']}' repeats unknown node '{member}'")
+                if member == node["id"]:
+                    raise ValidationError(f"loop '{node['id']}' cannot repeat itself")
+            cap = node.get("max", 3)
+            if not isinstance(cap, int) or not 1 <= cap <= 20:
+                raise ValidationError(
+                    f"loop '{node['id']}' needs max between 1 and 20; a loop with no ceiling "
+                    "is an outage with a schedule"
+                )
+            by_id = {n["id"]: n for n in nodes}
+            for member in body:
+                if by_id[member].get("loop") != node["id"]:
+                    raise ValidationError(
+                        f"node '{member}' is in loop '{node['id']}'s body and must say so: "
+                        f'add "loop": "{node["id"]}" to it'
+                    )
+                if by_id[member]["type"] == "human_gate":
+                    raise ValidationError(
+                        f"loop '{node['id']}' contains a human gate; a loop that stops for a "
+                        "person is a workflow with a person in it. move the gate outside"
+                    )
     # cycle detection (kahn)
     indegree = {n["id"]: len([d for d in (n.get("depends_on") or []) if d in ids]) for n in nodes}
     edges: dict[str, list[str]] = {n["id"]: [] for n in nodes}
@@ -115,6 +143,9 @@ class WorkflowService:
         self.crews = CrewService(store, getattr(runner, "registry", None))
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
+        # set by the composition root: the improvement engine is the lesson ledger, and
+        # a loop is the only thing in the tree that knows a run failed to converge
+        self.lessons = None
 
     # ---- crud ----------------------------------------------------------
     def save(
@@ -382,6 +413,8 @@ class WorkflowService:
                 node for node in nodes.values()
                 if node["id"] not in state["nodes"]
                 and node["id"] not in state["skipped"]
+                # a member of a loop body runs when its loop says so, not in the main pass
+                and not node.get("loop")
                 and all(self._dep_done(dep, state) for dep in node.get("depends_on") or [])
             ]
             if not ready:
@@ -445,6 +478,10 @@ class WorkflowService:
                 return self._node_n8n(workflow, node, state)
             if kind == "dify":
                 return self._node_dify(workflow, node, state)
+            if kind == "loop":
+                return self._node_loop(workflow, node, state)
+            if kind == "improve":
+                return self._node_improve(workflow, node, state)
             if kind == "branch":
                 chosen = self._branch_targets(node, state)
                 state["outputs"][node["id"]] = chosen
@@ -453,6 +490,151 @@ class WorkflowService:
         except Exception as exc:  # node failure must not kill the run silently
             return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
 
+
+    def _node_loop(self, workflow: dict, node: dict, state: dict) -> dict:
+        """repeat a body of nodes until a condition holds, a bounded number of times.
+
+        the loop is the unit that can fail informatively. a single node fails and tells
+        you what broke; a loop that runs out of attempts tells you the work did not
+        converge, which is the thing worth learning and the thing a flat graph cannot
+        say. so an exhausted loop files a lesson (see `_propose_lesson`) instead of
+        only reporting an error, and the lesson is a proposal: a person still decides
+        whether the crew should change how it works.
+        """
+        by_id = {n["id"]: n for n in workflow["definition"]["nodes"]}
+        body = list(node.get("body") or [])
+        cap = int(node.get("max") or 3)
+        until = node.get("until") or ""
+        history: list[dict] = state.setdefault("loops", {}).setdefault(node["id"], [])
+        history.clear()
+        converged = False
+        for attempt in range(1, cap + 1):
+            statuses: dict[str, str] = {}
+            for member in body:
+                # each attempt is a fresh run of the body: keeping the previous outcome
+                # would make attempt two a continuation of attempt one, which is how a
+                # loop gets to claim convergence it did not reach
+                state["nodes"].pop(member, None)
+                outcome = self._run_node(workflow, by_id[member], state)
+                state["nodes"][member] = {**outcome, "iteration": attempt}
+                statuses[member] = str(outcome.get("status"))
+                if outcome.get("status") == "waiting":
+                    return {"status": "failed",
+                            "error": f"loop body stopped for a person at '{member}'"}
+                if outcome.get("status") == "failed":
+                    break
+            test = self._render(until, state) if until else True
+            passed = self._is_true(test)
+            history.append({"iteration": attempt, "statuses": statuses, "until": test,
+                            "passed": passed})
+            if failed := [k for k, v in statuses.items() if v == "failed"]:
+                lesson = self._propose_lesson(
+                    workflow, state,
+                    f"loop '{node['id']}' failed at '{failed[0]}' in {workflow['name']}: "
+                    + str((state["nodes"].get(failed[0]) or {}).get("error") or "")[:200],
+                    node_id=node["id"],
+                )
+                return {"status": "failed", "iterations": attempt,
+                        "error": f"'{failed[0]}' failed inside the loop",
+                        "lesson": lesson}
+            if passed:
+                converged = True
+                break
+        if not converged:
+            lesson = self._propose_lesson(
+                workflow, state,
+                f"loop '{node['id']}' in {workflow['name']} did not converge in {cap} "
+                f"attempt(s) with condition {until or 'true'}; the approach needs "
+                "changing rather than another attempt",
+                node_id=node["id"],
+            )
+            return {"status": "failed", "iterations": cap, "converged": False,
+                    "error": f"loop did not converge in {cap} attempt(s)", "lesson": lesson}
+        return {"status": "succeeded", "iterations": len(history), "converged": True}
+
+    def _node_improve(self, workflow: dict, node: dict, state: dict) -> dict:
+        """a step whose whole job is to write down what the run taught.
+
+        it can only propose. the promotion path is `manage/lessons.py`, and a person
+        walks it, because an engine that writes its own instructions is the failure
+        mode self improvement exists to avoid.
+        """
+        statement = self._render(node.get("statement") or "", state)
+        if not statement and node.get("from_node"):
+            source = state["nodes"].get(node["from_node"]) or {}
+            statement = (f"{workflow['name']}: '{node['from_node']}' ended "
+                         f"{source.get('status')} with {(source.get('error') or 'no error')[:200]}")
+        if not statement:
+            return {"status": "failed", "error": "improve node produced no statement"}
+        named = node.get("agent")
+        agent_id = ""
+        if named:
+            match = [a for a in self.crews.list_agents(workflow["team_id"])
+                     if a["name"] == named or a["id"] == named]
+            agent_id = match[0]["id"] if match else ""
+        lesson = self._propose_lesson(workflow, state, str(statement), node_id=node["id"],
+                                      agent_id=agent_id)
+        state["outputs"][node["id"]] = {"lesson": lesson}
+        return {"status": "succeeded", "lesson": lesson}
+
+    def _propose_lesson(self, workflow: dict, state: dict, statement: str,
+                        node_id: str = "", agent_id: str = "") -> dict | None:
+        """file a lesson against whichever agent the run was for.
+
+        a workflow that names no agent has nobody to teach, and the honest answer there
+        is to record the reason rather than invent an owner for the lesson.
+        """
+        if self.lessons is None:
+            return None
+        agent_id = (agent_id or state.get("agent_id") or workflow.get("agent_id")
+                    or self._agent_from_state(state))
+        if not agent_id:
+            return {"proposed": False,
+                    "reason": "this run belongs to no single agent, so there is nobody to teach"}
+        # the lesson's evidence is the workflow run, which is not a row in `runs`. it goes
+        # into the statement so it stays readable, and run_id is only set when the id
+        # really is a run in that table, because a dangling reference is worse than none.
+        run_id = str(state.get("run_id", "") or "")
+        real_run = run_id and self.store.one("select id from runs where id = ?", (run_id,))
+        statement = statement if not run_id else f"{statement} (run {run_id})"
+        try:
+            lesson = self.lessons.propose(
+                agent_id, statement[:800], run_id=real_run["id"] if real_run else "",
+                actor=f"workflow:{workflow['name']}",
+            )
+        except CritterTownError as exc:
+            return {"proposed": False, "reason": f"{exc.code}: {exc.message}"}
+        return {"proposed": True, "lesson_id": lesson["id"], "agent_id": agent_id,
+                "node": node_id}
+
+    def _agent_from_state(self, state: dict) -> str:
+        for outcome in (state.get("nodes") or {}).values():
+            task_id = (outcome or {}).get("task_id")
+            if not task_id:
+                continue
+            task = self.store.one("select assignee_agent_id from tasks where id = ?", (task_id,))
+            if task and task["assignee_agent_id"]:
+                return str(task["assignee_agent_id"])
+            # an unassigned card still has an agent: whoever ran it. asking the run
+            # rather than the assignment is what keeps the lesson attached to the agent
+            # whose work actually fell short.
+            ran = self.store.one(
+                "select agent_id from runs where task_id = ? order by created_date desc limit 1",
+                (task_id,))
+            if ran and ran["agent_id"]:
+                return str(ran["agent_id"])
+        return ""
+
+    def _is_true(self, value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "1", "yes", "ok", "pass", "passed"}
+        if isinstance(value, dict):
+            return bool(value.get("ok") or value.get("passed") or value.get("pass"))
+        return bool(value)
 
     def _open_gate(self, workflow: dict, node: dict, state: dict, task: dict) -> dict | None:
         """the gate is a link, not a dashboard visit.

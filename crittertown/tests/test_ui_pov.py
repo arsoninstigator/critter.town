@@ -20,8 +20,10 @@ ENTRY = re.compile(r'(\w+):\s*"([^"]+)"')
 # the only writes the shell is allowed: a card move, a calendar block, a profile value,
 # a revoked grant, closing a routine's receipt, pausing a routine, and pausing a limit.
 # everything else it renders is read-only by construction.
+# canvas b adds three: saving a definition, running a workflow, and answering its gate.
+# they are the operator acting in their own editor, not an agent acting through the shell.
 WRITES = {"moveTask", "calendar", "profileEntry", "grant", "routineDone", "routinePause",
-          "materialise", "guardrail"}
+          "materialise", "guardrail", "saveWorkflow", "workflowRun", "workflowResume"}
 
 
 def routes_in(page: str) -> dict[str, str]:
@@ -52,12 +54,20 @@ class PageShapeTests(unittest.TestCase):
     def test_the_page_writes_only_where_it_is_allowed_to(self):
         methods = re.findall(r'method:\s*"(\w+)"', POV_PAGE)
         self.assertEqual(sorted(methods),
-                         ["DELETE", "DELETE", "POST", "POST", "POST", "POST", "POST", "PUT"])
+                         ["DELETE", "DELETE", "POST", "POST", "POST", "POST", "POST",
+                          "POST", "POST", "POST", "PUT"])
         for name in WRITES:
             self.assertIn(name, routes_in(POV_PAGE))
 
     def test_the_new_views_are_in_the_shell(self):
         self.assertIn('"routines","guardrails"', POV_PAGE)
+
+    def test_the_workflow_editor_is_in_the_shell(self):
+        self.assertIn('"workflows"', POV_PAGE)
+        self.assertIn("renderWorkflowEditor", POV_PAGE)
+        # the editor has to offer a gate's two answers, or a parked run can only be
+        # resumed from curl, which is the thing the canvas exists to stop
+        self.assertIn('["approved", "rejected"]', POV_PAGE)
         self.assertIn("a missed routine reads as missed", POV_PAGE)
         self.assertIn("refused today", POV_PAGE)
 

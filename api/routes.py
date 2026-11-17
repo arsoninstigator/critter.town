@@ -35,6 +35,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from comms import human as a2a_human
 from comms import protocol as a2a_spec
 from agents.agent_imports import AGENT_SOURCES, adopt, export_agent, import_agent
+from agents.context import SLICES
 from core.app import App, build_app
 from comms.events import Event
 from core.errors import CritterTownError, NotFound, ValidationError
@@ -783,6 +784,56 @@ def create_api(app: App | None = None) -> FastAPI:
     @api.get("/agents/{agent_id}/children")
     def agent_children(agent_id: str, include_retired: bool = False) -> dict:
         return {"children": app.profile.children(agent_id, include_retired=include_retired)}
+
+    # ---- sidecars ------------------------------------------------------
+    # a sidecar is a helper beside one card, not a junior agent below its parent, so it
+    # gets its own door: it always names the card, and there is no fan-out and no lane.
+    @api.post("/agents/{agent_id}/sidecars")
+    def spawn_sidecar(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        if not data.get("task_id"):
+            raise ValidationError("a sidecar works on one card; task_id is required")
+        spawn = app.profile.spawn(
+            agent_id,
+            data.get("name") or "sidecar",
+            role=data.get("role", ""),
+            mode=data.get("mode"),
+            task_id=data["task_id"],
+            relation="sidecar",
+            specializations=data.get("specializations"),
+            persistence=data.get("persistence"),
+        )
+        return {**spawn, "relation": "sidecar"}
+
+    @api.get("/agents/{agent_id}/sidecars")
+    def agent_sidecars(agent_id: str, task_id: str = "") -> dict:
+        return {"sidecars": app.profile.sidecars(task_id=task_id, agent_id=agent_id)}
+
+    @api.get("/tasks/{task_id}/sidecars")
+    def task_sidecars(task_id: str) -> dict:
+        app.kanban.get_task(task_id)
+        return {"sidecars": app.profile.sidecars(task_id=task_id)}
+
+    # ---- what an agent was handed --------------------------------------
+    # the snapshot is the run's context. it is readable after the fact because a prompt
+    # nobody kept cannot answer "what was it told when it did that".
+    @api.get("/agents/{agent_id}/context")
+    def agent_context(agent_id: str, limit: int = 3) -> dict:
+        app.crews.get_agent(agent_id)
+        return {"snapshots": app.context.recent(agent_id, limit=limit),
+                "needs": app.context.needs_for(agent_id),
+                "budgets": dict(SLICES)}
+
+    @api.post("/agents/{agent_id}/context/preview")
+    def preview_context(agent_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        snapshot = app.context.compose(
+            agent_id,
+            task_id=data.get("task_id", ""),
+            needs=data.get("needs"),
+            store=False,
+        )
+        return snapshot
 
     @api.get("/agents/{agent_id}/lineage")
     def agent_lineage(agent_id: str) -> dict:

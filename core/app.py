@@ -28,6 +28,7 @@ from comms.channels import ChannelService
 from comms.gateway import CommsGateway
 from comms.service import CommsService
 from core.config import Settings
+from agents.context import ContextSlicer
 from agents.crews import CrewService
 from manage.guardrails import GuardrailService
 from manage.knowledge.base import KnowledgeBase
@@ -71,6 +72,7 @@ class App:
     # already knows
     guardrails: GuardrailService
     lessons: LessonService
+    context: ContextSlicer
     knowledge: KnowledgeBase
     triggers: TriggerService
     pov: PovService
@@ -206,6 +208,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     knowledge = KnowledgeBase(store, crews=crews, audit=audit)
     runner.knowledge = knowledge
     pov.profile = profile
+    # the runner asks the profile which relation an agent has, because a sidecar may not
+    # be handed a card of its own
+    runner.profile = profile
     profile.migrate()
     workflows.scheduler = scheduler
     workflows.audit = audit
@@ -256,6 +261,13 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     runner.events_hook = emit
     workflows.gates = gates
     workflows.channels = channels
+    workflows.lessons = lessons
+
+    # every run is handed a slice of the crew's working context, and the slice it was
+    # handed is written down, because a prompt nobody kept is a claim about a run
+    context = ContextSlicer(store, crews=crews, kanban=kanban, intent=intent,
+                            knowledge=knowledge, profile=profile, a2a=a2a)
+    runner.context = context
 
     kanban.events_hook = emit
     channels.events_hook = emit
@@ -286,6 +298,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         triggers=triggers,
         intent=intent,
         routines=routines,
+        context=context,
         guardrails=guardrails,
         lessons=lessons,
         knowledge=knowledge,

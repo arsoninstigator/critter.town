@@ -111,13 +111,25 @@ var R = {
   routinePause: "routines/{routine}/pause",
   materialise: "crews/{team}/routines/materialise",
   guardrails: "crews/{team}/guardrails",
-  guardrail: "guardrails/{rail}"
+  guardrail: "guardrails/{rail}",
+  // canvas b: the workflow editor. save, run and resume are the operator's own
+  // actions in their own editor, which is why they are writes this page may make.
+  workflows: "crews/{team}/workflows",
+  saveWorkflow: "crews/{team}/workflows",
+  workflow: "workflows/{workflow}",
+  workflowRun: "workflows/{workflow}/run",
+  workflowResult: "workflow-runs/{workflow_run}",
+  workflowResume: "workflow-runs/{workflow_run}/resume",
+  sidecars: "agents/{agent}/sidecars",
+  context: "agents/{agent}/context"
 };
 
 var NAMESPACES = ["skills","scope","memory","instructions","knowledge","perms","tools","vertical","spawn"];
-var VIEWS = ["board","calendar","inbox","runs","profile","computer","access","routines","guardrails"];
+var VIEWS = ["board","calendar","inbox","runs","workflows","profile","computer",
+             "access","routines","guardrails"];
 
-var state = { crews: [], team: null, channels: [], agents: [], agent: null, view: "board" };
+var state = { crews: [], team: null, channels: [], agents: [], agent: null, view: "board",
+              workflow: null, workflowRun: null };
 
 function fill(path, params) {
   return "/" + path.replace(/\{(\w+)\}/g, function (_m, k) {
@@ -217,15 +229,16 @@ async function renderView() {
   if (!state.agent) { view.appendChild(el("div", { class: "muted", text: "no agent to render" })); return; }
   var params = { agent: state.agent.id, team: state.team ? state.team.id : "" };
   try {
-    if (state.view === "board") await renderBoard(view, params);
+    if (state.view === "board") { await renderBoard(view, params); await renderSidecars(view, params); }
     else if (state.view === "calendar") await renderCalendar(view, params);
     else if (state.view === "inbox") await renderInbox(view, params);
-    else if (state.view === "runs") await renderRuns(view, params);
+    else if (state.view === "runs") { await renderRuns(view, params); await renderContext(view, params); }
     else if (state.view === "profile") await renderProfile(view, params);
     else if (state.view === "computer") await renderComputer(view, params);
     else if (state.view === "access") await renderAccess(view, params);
     else if (state.view === "routines") await renderRoutines(view, params);
     else if (state.view === "guardrails") await renderGuardrails(view, params);
+    else if (state.view === "workflows") await renderWorkflows(view, params);
   } catch (err) {
     say(err.message, true);
     view.appendChild(el("div", { class: "panel" }, [
@@ -447,6 +460,175 @@ async function renderRoutines(view, params) {
   view.appendChild(panel);
   view.appendChild(el("div", { class: "muted",
     text: "a missed routine reads as missed, not as absent: sweep writes the miss, so the summary has a denominator." }));
+}
+
+// ---- canvas b: workflows ----------------------------------------------
+var WORKFLOW_TYPES = ["agent_task","shell","set_context","human_gate","branch","n8n",
+                      "dify","loop","improve"];
+
+async function renderWorkflows(view, params) {
+  var data = await api(R.workflows, { team: params.team });
+  var panel = el("div", { class: "panel" }, [el("h2", { text: "workflows" })]);
+  var list = data.workflows || [];
+  if (!list.length) {
+    panel.appendChild(el("div", { class: "muted", text: "this crew has no workflows yet" }));
+  }
+  list.forEach(function (workflow) {
+    panel.appendChild(el("div", { class: "kv" }, [
+      el("span", { class: "name" }, [el("a", {
+        href: "#", text: workflow.name,
+        onclick: async function (event) {
+          event.preventDefault();
+          state.workflow = await api(R.workflow, { workflow: workflow.id });
+          state.workflowRun = null;
+          renderHeader(); renderView();
+        }
+      })]),
+      el("span", { class: "muted", text: " v" + (workflow.version || 1) })
+    ]));
+  });
+  view.appendChild(panel);
+  if (state.workflow) await renderWorkflowEditor(view, params);
+}
+
+async function renderWorkflowEditor(view, params) {
+  var workflow = state.workflow;
+  var nodes = (workflow.definition || {}).nodes || [];
+  var guard = nodes.filter(function (node) {
+    return node.type === "human_gate";
+  }).length;
+  var loops = nodes.filter(function (node) { return node.type === "loop"; }).length;
+
+  var editor = el("textarea", {
+    spellcheck: "false",
+    rows: String(Math.max(12, nodes.length * 3)),
+    style: "width:100%;background:#151515;color:#dfe6ec;border:1px solid #2a2a2a;" +
+           "font-family:ui-monospace,monospace;font-size:12px;padding:10px"
+  });
+  editor.value = JSON.stringify(workflow.definition || {}, null, 2);
+
+  var panel = el("div", { class: "panel" }, [
+    el("h2", { text: workflow.name + " · " + nodes.length + " node(s)" }),
+    el("div", { class: "muted", text:
+      guard + " gate(s) · " + loops + " loop(s) · types: " + WORKFLOW_TYPES.join(", ") }),
+    editor
+  ]);
+
+  var save = el("button", { text: "save" });
+  save.onclick = async function () {
+    var definition;
+    try { definition = JSON.parse(editor.value); }
+    catch (err) { say("that is not json: " + err.message, true); return; }
+    try {
+      state.workflow = await api(R.saveWorkflow,
+        { team: params.team },
+        { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: workflow.name, definition: definition }) });
+      say("saved " + workflow.name);
+      renderView();
+    } catch (err) { say(err.message, true); }
+  };
+
+  var run = el("button", { text: "run" });
+  run.onclick = async function () {
+    try {
+      state.workflowRun = await api(R.workflowRun,
+        { workflow: workflow.id },
+        { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ trigger: {} }) });
+      say("run " + state.workflowRun.status);
+      await renderWorkflowRun(view, params);
+    } catch (err) { say(err.message, true); }
+  };
+
+  panel.appendChild(el("div", { class: "row" }, [save, run]));
+  view.appendChild(panel);
+  if (state.workflowRun) await renderWorkflowRun(view, params);
+}
+
+async function renderWorkflowRun(view, params) {
+  var run = state.workflowRun;
+  var panel = el("div", { class: "panel" }, [
+    el("h2", { text: "last run · " + run.status }),
+    el("div", { class: "muted", text: "run " + run.id })
+  ]);
+  var nodes = run.state && run.state.nodes ? run.state.nodes : {};
+  Object.keys(nodes).forEach(function (id) {
+    var outcome = nodes[id] || {};
+    var line = el("div", { class: "kv" }, [
+      el("span", { class: "name", text: id }),
+      el("span", { class: outcome.status === "failed" ? "bad" : "good",
+                   text: outcome.status + (outcome.iterations ? " · " + outcome.iterations + " iteration(s)" : "") })
+    ]);
+    panel.appendChild(line);
+    if (outcome.error) {
+      panel.appendChild(el("div", { class: "bad", text: String(outcome.error).slice(0, 200) }));
+    }
+    if (outcome.lesson && outcome.lesson.proposed) {
+      panel.appendChild(el("div", { class: "muted",
+        text: "a lesson was proposed from this node; it waits for a person" }));
+    }
+    if (outcome.status === "waiting") {
+      // the gate is the only place an answer goes, and it takes two of them
+      var decide = el("select", {});
+      ["approved", "rejected"].forEach(function (choice) {
+        decide.appendChild(el("option", { value: choice, text: choice }));
+      });
+      var send = el("button", { text: "answer the gate" });
+      send.onclick = async function () {
+        try {
+          state.workflowRun = await api(R.workflowResume,
+            { workflow_run: run.id },
+            { method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ node_id: id, decision: decide.value }) });
+          say("answered " + id + ": " + decide.value);
+          renderView();
+        } catch (err) { say(err.message, true); }
+      };
+      panel.appendChild(el("div", { class: "row" }, [decide, send]));
+    }
+  });
+  if (!Object.keys(nodes).length) {
+    panel.appendChild(el("div", { class: "muted", text: "this run recorded no nodes" }));
+  }
+  view.appendChild(panel);
+}
+
+// ---- what an agent was handed, and who is beside its cards -------------
+async function renderContext(view, params) {
+  var data = await api(R.context, { agent: params.agent });
+  var snapshots = data.snapshots || [];
+  var panel = el("div", { class: "panel" }, [el("h2", { text: "context it was given" })]);
+  if (!snapshots.length) {
+    panel.appendChild(el("div", { class: "muted", text: "no run has been sliced yet" }));
+  }
+  snapshots.forEach(function (snapshot) {
+    panel.appendChild(el("div", { class: "kv" }, [
+      el("span", { class: "name", text: snapshot.slices.map(function (slice) {
+        return slice.name;
+      }).join(" ") }),
+      el("span", { class: "muted", text: snapshot.chars + " chars · " + snapshot.id })
+    ]));
+  });
+  panel.appendChild(el("div", { class: "muted",
+    text: "budgets: " + JSON.stringify(data.budgets || {}) }));
+  view.appendChild(panel);
+}
+
+async function renderSidecars(view, params) {
+  var data = await api(R.sidecars, { agent: params.agent });
+  var sidecars = data.sidecars || [];
+  if (!sidecars.length) return;
+  var panel = el("div", { class: "panel" }, [el("h2", { text: "sidecars · " + sidecars.length })]);
+  sidecars.forEach(function (sidecar) {
+    panel.appendChild(el("div", { class: "kv" }, [
+      el("span", { class: "name", text: sidecar.name + " (" + (sidecar.role || "no role") + ")" }),
+      el("span", { class: "muted", text: "beside card " + sidecar.task_id.slice(0, 12) })
+    ]));
+  });
+  panel.appendChild(el("div", { class: "muted",
+    text: "a sidecar works inside its parent's run and retires when the card closes" }));
+  view.appendChild(panel);
 }
 
 async function renderGuardrails(view, params) {

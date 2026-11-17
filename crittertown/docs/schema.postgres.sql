@@ -342,11 +342,30 @@ create table if not exists agent_spawns (
     parent_agent_id text not null references agents(id) on delete cascade,
     child_agent_id text not null references agents(id) on delete cascade,
     mode text not null default 'ephemeral',
+    -- child: a principal of its own, with a lineage the parent signed.
+    -- sidecar: a helper attached to one card, with no lineage of its own.
+    relation text not null default 'child',
     task_id text,
     status text not null default 'active',
     created_date double precision not null,
     retired_date double precision
 );
+
+-- what one agent was actually handed for one run. a prompt is a slice of the crew's
+-- working context, and a slice nobody can read back is a claim about a run rather
+-- than a record of it.
+create table if not exists context_snapshots (
+    id text primary key,
+    team_id text not null,
+    agent_id text not null references agents(id) on delete cascade,
+    task_id text not null default '',
+    run_id text not null default '',
+    needs text not null default '[]',
+    slices text not null default '[]',
+    chars integer not null default 0,
+    created_date double precision not null
+);
+create index if not exists context_snapshots_agent on context_snapshots (agent_id, created_date);
 create index if not exists agent_spawns_parent on agent_spawns (parent_agent_id, status);
 
 create table if not exists job_queue (
