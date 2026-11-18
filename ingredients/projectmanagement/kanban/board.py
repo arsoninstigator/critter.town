@@ -12,7 +12,31 @@ it never did, and a `review` column is a gate, not decoration.
 from __future__ import annotations
 
 from core.db import Store, dumps, loads, new_id, now
+
+# a card that enters work carries its own deadlines, so "this should have moved by
+# now" is a comparison rather than a guess. the sweep reads them; nothing else has
+# to remember they exist.
+CLAIM_WINDOW_SECONDS = 900.0
+LEASE_SECONDS = 300.0
 from core.errors import NotFound, ValidationError
+
+def patch_for(column: str, ts: float) -> dict:
+    """the deadlines a column implies.
+
+    leaving in progress releases the lease, because a card the board moved by hand is
+    not a card a worker still holds. entering in progress sets a deadline without
+    claiming: a person can move a card there, and the sweep will say so.
+    """
+    free = {"lease_holder": None, "lease_expires": None, "lease_renewals": 0}
+    if column == "ready":
+        return {**free, "claim_deadline_at": ts + CLAIM_WINDOW_SECONDS,
+                "next_action_at": ts + CLAIM_WINDOW_SECONDS}
+    if column == "in_progress":
+        return {"next_action_at": ts + LEASE_SECONDS}
+    if column in {"blocked", "review", "done"}:
+        return {**free, "next_action_at": None, "claim_deadline_at": None}
+    return {}
+
 
 DEFAULT_COLUMNS = ["backlog", "ready", "in_progress", "review", "done", "blocked"]
 
@@ -66,15 +90,16 @@ class KanbanService:
         task_id = new_id("task")
         ts = now()
         with self.store.tx() as c:
+            deadline = ts + CLAIM_WINDOW_SECONDS if column == "ready" else None
             c.execute(
                 """insert into tasks (id, team_id, parent_id, title, description, column_name,
                        priority, assignee_agent_id, required_skills, isolation, payload, result,
-                       channel_id, created_date, updated_date)
-                   values (?,?,?,?,?,?,?,?,?,?,?, '{}', ?, ?, ?)""",
+                       channel_id, claim_deadline_at, next_action_at, created_date, updated_date)
+                   values (?,?,?,?,?,?,?,?,?,?,?, '{}', ?, ?, ?, ?, ?)""",
                 (
                     task_id, team_id, parent_id, title, description, column, int(priority),
                     assignee_agent_id, dumps(required_skills or []), isolation,
-                    dumps(payload or {}), channel_id, ts, ts,
+                    dumps(payload or {}), channel_id, deadline, deadline, ts, ts,
                 ),
             )
         self._event(task_id, "created", "system", {"column": column, "title": title})
@@ -225,7 +250,9 @@ class KanbanService:
                 f"illegal transition {current} -> {column}", allowed=sorted(allowed)
             )
         self._check_actor(task, actor, column)
-        patch = {"review_note": note} if note and column == "review" else {}
+        patch = patch_for(column, now())
+        if note and column == "review":
+            patch["review_note"] = note
         with self.store.tx() as c:
             c.execute(
                 "update tasks set column_name = ?, updated_date = ? where id = ?",
@@ -307,6 +334,17 @@ class KanbanService:
             "result": loads(row["result"], {}),
             "review_note": row["review_note"],
             "channel_id": row["channel_id"] if "channel_id" in row.keys() else None,
+            "lease": {
+                "holder": row["lease_holder"] or "",
+                "expires": row["lease_expires"],
+                "renewals": int(row["lease_renewals"] or 0),
+            },
+            "attempts": int(row["attempts"] or 0),
+            "max_attempts": int(row["max_attempts"] or 3),
+            "evidence_ref": row["evidence_ref"] or "",
+            "blocked_reason": row["blocked_reason"] or "",
+            "claim_deadline_at": row["claim_deadline_at"],
+            "next_action_at": row["next_action_at"],
             "created_date": row["created_date"],
             "updated_date": row["updated_date"],
         }

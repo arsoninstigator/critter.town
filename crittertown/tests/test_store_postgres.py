@@ -106,9 +106,9 @@ class InitTests(unittest.TestCase):
         self.assertIn("current_schema()", questions[0])
 
     def test_columns_are_widened_only_on_tables_that_exist(self):
-        # `tasks` exists with channel_id already; `agents` exists without agent_key
+        # `tasks` already carries everything the widening would add, `agents` does not
         driver = FakeDriver(existing_columns={
-            "tasks": ["channel_id"],
+            "tasks": ["id", *LATER_COLUMNS["tasks"]],
             "agents": ["id", "name"],
         })
         store_with(driver)

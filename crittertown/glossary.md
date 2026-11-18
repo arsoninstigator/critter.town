@@ -70,6 +70,20 @@ policy, its own kanban columns and its own context. table: `teams`. a crew is a 
 the town is the thing teams live in: the word for a team did not change when the word for
 the place did.
 
+### attempts
+a card that failed a run keeps a count. a runtime failure hands the card back to `ready`
+and spends one attempt, so a flaky machine is a retry rather than a funeral; the third
+spend parks it in `blocked` with `attempts_exhausted`. a wrong brief blocks at once,
+because retrying an instruction that cannot work burns good workers on a bad question.
+the way back from blocked is `replan`, which needs a different brief and resets the count.
+
+### custody
+who holds a card right now, as a lease rather than a status. `claim` sets a holder and an
+expiry on the row, `renew` pushes the expiry out one turn at a time, and `complete` or
+`abandon` gives it back. the point is that a worker which dies mid-run leaves an expiry
+behind, so the sweep can see it without anyone remembering the run happened. `sidecars`
+never take custody: they help with a card, they do not own one.
+
 ### department
 the hierarchy, kept explicit: one coordinator, members reporting to it, departments that
 nest. routing a card to a department puts it on the coordinator's desk, and escalation
@@ -174,6 +188,13 @@ the row in `context_snapshots` that records what one agent was handed for one ru
 slices, how many characters each, and what was truncated. it exists so "what was it told
 when it did that" is a lookup rather than an inference from a prompt nobody kept.
 
+
+### sweep
+the pass that compares cards to the clock: it reclaims expired custody, revokes a lease
+that keeps renewing without progress, alarms a card that nothing may claim, and names the
+invariants a row breaks. it repairs two things and reports the rest, because a card that
+repaired itself would hide the bug that broke it. `GET /crews/{id}/custody` shows what it
+would do; `POST /crews/{id}/sweep` does it.
 
 ### the town
 the ecosystem is the town. `critter.town` is the repository, `crittertown` is the
