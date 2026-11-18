@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SCHEMA = """
 create table if not exists meta (
@@ -765,7 +765,22 @@ def now() -> float:
 
 
 LATER_COLUMNS: dict[str, dict[str, str]] = {
-    "tasks": {"channel_id": "text references channels(id) on delete set null"},
+    "tasks": {
+        "channel_id": "text references channels(id) on delete set null",
+        # v12: a card in someone's hands is a lease with an expiry, not a status. an
+        # expiry carried on the row is what makes a dead holder visible without a
+        # reaper that remembers it, and the counters are what make a failed attempt
+        # cost something.
+        "lease_holder": "text",
+        "lease_expires": "real",
+        "lease_renewals": "integer not null default 0",
+        "attempts": "integer not null default 0",
+        "max_attempts": "integer not null default 3",
+        "evidence_ref": "text not null default ''",
+        "blocked_reason": "text not null default ''",
+        "claim_deadline_at": "real",
+        "next_action_at": "real",
+    },
     # which side wrote the row: the app, or the signed log behind it
     "channel_messages": {"via": "text not null default 'app'"},
     # immutable public handle: alphanumeric, generated once, never updated
@@ -806,6 +821,9 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
 LATER_INDEXES = (
     # needs `relation`, which only exists after _add_columns on a db older than v11
     "create index if not exists agent_spawns_task on agent_spawns (task_id, relation, status)",
+    # the sweep reads this one index and nothing else: a scan here is a sweep that
+    # storms on a board with history
+    "create index if not exists tasks_live on tasks (team_id, column_name, next_action_at)",
     "create index if not exists tasks_channel on tasks (channel_id, column_name)",
     "create unique index if not exists agents_key on agents (agent_key)",
     "create unique index if not exists agents_agentid on agents (agentid)",

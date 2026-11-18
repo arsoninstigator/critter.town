@@ -122,6 +122,22 @@ curl -X POST localhost:8000/agents/$AGENT/vault -H 'content-type: application/js
 - revoking writes a row and an audit entry (`vault.revoked`). the grant history is the
   point: an audit trail that deletes itself is not one
 
+### custody: who holds a card
+
+- `GET /tasks/{id}/custody` returns the holder, the lease expiry, the attempt count and
+  the invariants the row breaks right now
+- `GET /crews/{id}/custody` is the sweep as a question: every action it would take and
+  every card it would name, without writing
+- `POST /crews/{id}/sweep` applies the two repairs (reclaim, revoke) and reports the rest
+- `POST /tasks/{id}/replan` takes a different brief, resets attempts and returns the card
+  to `ready`. a card in someone's hands refuses it: fix the brief, give the card back, then
+  replan
+
+the runner holds the lease: it claims before the card becomes work, renews one turn at a
+time, completes with `run:<id>` as the evidence reference, and hands the card back when a
+run fails. a runtime failure is a retry and spends an attempt; a wrong brief blocks at
+once. the runner never moves a card it no longer holds.
+
 ### sidecars, and what an agent was handed
 
 - `POST /agents/{id}/sidecars` spawns a helper beside one card (`task_id` required).

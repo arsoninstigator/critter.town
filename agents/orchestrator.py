@@ -53,6 +53,9 @@ class CrewRunner:
         # is allowed to become work
         self.guardrails = guardrails
         self.profile = profile
+        # set by the composition root: a dispatched card is held under a lease, so a
+        # holder that dies leaves an expiry instead of a card nobody can explain
+        self.custody = None
         self.knowledge = None
         # set by the composition root: the prompt is assembled from slices
         self.context = None
@@ -142,6 +145,10 @@ class CrewRunner:
                 {"agent_id": agent["id"], "tools": agent.get("tools") or []},
                 task=task,
             )
+        # custody before the column: a card in progress that nobody holds is the state
+        # that used to need a person to notice it
+        if self.custody is not None:
+            self.custody.claim(task_id, agent["id"])
         if task["column"] == "ready":
             task = self.kanban.move(task_id, "in_progress", actor)
         self.crews.update_agent(agent["id"], status="working")
@@ -195,6 +202,15 @@ class CrewRunner:
                     turn_steps.append({"kind": "a2a", "message_id": posted["id"], "status": posted["status"]})
                 steps.append({"turn": turn, "thought": action.get("thought", ""), "steps": turn_steps})
                 self._update_run(run_id, steps)
+                if self.custody is not None:
+                    try:
+                        self.custody.renew(task_id, agent["id"])
+                    except CritterTownError as lost:
+                        # the lease went while we were thinking. the sweep owns the card
+                        # now, and a run that keeps writing would be writing over it.
+                        raise NotAllowed(
+                            "custody of this card was lost mid-run: the lease expired",
+                            task_id=task_id, reason="lease_expired") from lost
                 if action.get("done"):
                     done = True
                     result = action.get("result") or {}
@@ -205,7 +221,20 @@ class CrewRunner:
         except CritterTownError as exc:
             error = f"{exc.code}: {exc.message}"
             self._update_run(run_id, steps, status="failed", error=error)
-            self.kanban.move(task_id, "blocked", agent["id"], note=error[:500])
+            # a bad instruction is not a failed holder. a validation refusal means the
+            # brief was wrong, so the card blocks at once and replan is the way forward;
+            # a runtime failure spends one attempt and puts the card back in play.
+            target = "blocked"
+            if self.custody is not None:
+                try:
+                    handed_back = self.custody.abandon(
+                        task_id, agent["id"], error,
+                        terminal=isinstance(exc, (ValidationError, NotAllowed)))
+                    target = handed_back["column"]
+                except CritterTownError:
+                    # the lease is gone, so the sweep is the one that can reclaim it
+                    target = "blocked"
+            self.kanban.move(task_id, target, agent["id"], note=error[:500])
             self._retire_sidecars(task_id)
             if self.events_hook is not None:
                 self.events_hook("run.failed", {
@@ -233,6 +262,8 @@ class CrewRunner:
             {"agent": agent["name"], "result": result},
             author=agent["name"],
         )
+        if self.custody is not None:
+            self.custody.complete(task_id, agent["id"], evidence=f"run:{run_id}")
         reviewed = team["review_mode"] == "reviewed" and "review" in self.kanban.columns(team["id"])
         task = self.kanban.complete(
             task_id, {**result, "run_id": run_id, "agent_id": agent["id"]},

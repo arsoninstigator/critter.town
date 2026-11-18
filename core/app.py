@@ -49,6 +49,8 @@ from work.shifts import ShiftService
 from work.triggers import TriggerService
 from work.routines import RoutineService
 from work.workflows import WorkflowService
+from work.custody import Custody
+from work.liveness import Liveness
 
 
 @dataclass
@@ -88,6 +90,8 @@ class App:
     comms: CommsService
     comms_gateway: CommsGateway
     sagas: SagaService
+    custody: Custody
+    liveness: Liveness
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -208,6 +212,11 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     knowledge = KnowledgeBase(store, crews=crews, audit=audit)
     runner.knowledge = knowledge
     pov.profile = profile
+    # custody is what makes a dispatched card recoverable: the runner takes a lease,
+    # and a holder that dies leaves an expiry rather than a mystery
+    custody = Custody(store)
+    liveness = Liveness(store, kanban)
+    runner.custody = custody
     # the runner asks the profile which relation an agent has, because a sidecar may not
     # be handed a card of its own
     runner.profile = profile
@@ -315,6 +324,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         comms=comms,
         comms_gateway=comms_gateway,
         sagas=sagas,
+        custody=custody,
+        liveness=liveness,
         polls=polls,
         browsers=browsers,
         ops=ops,

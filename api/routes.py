@@ -36,6 +36,7 @@ from comms import human as a2a_human
 from comms import protocol as a2a_spec
 from agents.agent_imports import AGENT_SOURCES, adopt, export_agent, import_agent
 from agents.context import SLICES
+from work.liveness import violations
 from core.app import App, build_app
 from comms.events import Event
 from core.errors import CritterTownError, NotFound, ValidationError
@@ -883,6 +884,42 @@ def create_api(app: App | None = None) -> FastAPI:
         task["events"] = app.kanban.events(task_id)
         task["runs"] = app.runner.list_runs(task_id)
         return task
+
+    # ---- custody -------------------------------------------------------
+    # who holds a card, what it has cost, and the sweep that finds the ones nobody
+    # is watching. the preview is read-only, so a person can see the report before
+    # letting it move anything.
+    @api.get("/crews/{team_id}/custody")
+    def crew_custody(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.liveness.preview(team_id)
+
+    @api.post("/crews/{team_id}/sweep")
+    def crew_sweep(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.liveness.run(team_id)
+
+    @api.post("/tasks/{task_id}/replan")
+    def replan_task(task_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.custody.replan(
+            task_id, data.get("brief", ""), actor=str(data.get("actor", "owner"))
+        )
+
+    @api.get("/tasks/{task_id}/custody")
+    def task_custody(task_id: str) -> dict:
+        task = app.custody.task(task_id)
+        return {
+            "task_id": task_id,
+            "held_by": app.custody.held_by(task_id),
+            "lease": {"holder": task["lease_holder"], "expires": task["lease_expires"],
+                      "renewals": int(task["lease_renewals"] or 0)},
+            "attempts": int(task["attempts"] or 0),
+            "max_attempts": int(task["max_attempts"] or 3),
+            "next_action_at": task["next_action_at"],
+            "claim_deadline_at": task["claim_deadline_at"],
+            "violations": violations(task),
+        }
 
     @api.post("/tasks/{task_id}/move")
     def move_task(task_id: str, payload: dict = Body(...)) -> dict:

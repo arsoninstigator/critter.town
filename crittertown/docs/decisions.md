@@ -178,3 +178,26 @@ what the run verifies, in a browser, on a real database: a card moves and the ap
 moved, the editor opens a definition containing a loop and a gate, the loop workflow fails
 with its iterations and files a lesson, the gate run parks and answering the gate settles it,
 and the runs view shows the eight slices and their budgets. screenshots land beside the run.
+
+## a card in someone's hands is a lease
+
+a dispatched card used to be a column and a busy flag. if the worker died, the card stayed
+in progress with nobody holding it, and telling a working worker from a dead one took a
+person reading the board.
+
+so custody is a lease with an expiry on the card itself: holder, expiry, renewal count, all
+three on the row, with `next_action_at` pointing at the expiry. a holder that stops renewing
+becomes visible by comparing the row to the clock, and nothing has to remember that the run
+existed. the sweep then reclaims the card, or revokes a lease that renews without progress,
+which is the same row seen twice.
+
+the second half is what a failure means. a runtime failure is a spent attempt, so the card
+returns to ready and runs again until the cap parks it. a wrong brief blocks at once,
+because retrying an instruction that cannot work spends good holders on a bad question.
+`replan` is the way back, and it refuses the same brief, refuses a held card, and resets
+the attempt count only because the previous attempts answered a different question.
+
+evidence arrives with the completion: `run:<id>` is written to the card, and the scheme
+that decides which references can prove which kind of work is the next thing to land, so
+that a commit is signed off with a commit and a deal with a receipt.
+
