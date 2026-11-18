@@ -140,3 +140,47 @@ class PageRouteTests(AppCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PagePayloadTests(AppCase):
+    """a route that exists is not a route whose answer the page can read."""
+
+    def test_every_view_reads_a_key_its_endpoint_actually_sends(self):
+        """the bug this exists for: the guardrails panel read {summary, limits} while the
+        endpoint answered {guardrails, refused_today}, so it rendered "no limits" forever
+        and the pause button, the only way to stand a limit down from here, was never on
+        screen. a route check cannot see that, and neither can a person who has never had
+        a limit to pause. so the keys are checked against live responses."""
+        from fastapi.testclient import TestClient
+
+        api = TestClient(create_api(self.app))
+        team = self.crew()
+        agent = self.agent(team["id"], "wren", role="writer")
+        self.app.guardrails.set(team["id"], "open_cards", 3, actor="owner")
+        self.app.kanban.create_task(team["id"], "draft", column="ready")
+
+        contracts = {
+            "guardrails": f"/crews/{team['id']}/guardrails",
+            "grants": f"/agents/{agent['id']}/grants",
+            "context": f"/agents/{agent['id']}/context",
+            "sidecars": f"/agents/{agent['id']}/sidecars",
+            "workflows": f"/crews/{team['id']}/workflows",
+        }
+        for name, path in contracts.items():
+            payload = api.get(path).json()
+            self.assertIsInstance(payload, dict, name)
+            # the page has to name at least one key the endpoint sends, or it is reading
+            # a shape nobody returns
+            self.assertTrue(
+                any(f'data.{key}' in POV_PAGE or f'{key}:' in POV_PAGE for key in payload),
+                f"{name}: the page reads no key that {path} returns ({sorted(payload)})",
+            )
+
+    def test_the_guardrails_panel_reads_the_limits_the_api_sends(self):
+        self.assertIn("data.guardrails", POV_PAGE)
+        self.assertIn("refused_today", POV_PAGE)
+        self.assertNotIn("data.limits", POV_PAGE)
+
+
+if __name__ == "__main__":
+    unittest.main()

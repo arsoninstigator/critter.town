@@ -211,13 +211,25 @@ function renderHeader() {
     if (found) { state.agent = found; renderHeader(); renderView(); }
   };
   document.getElementById("agentKey").textContent = state.agent ? (state.agent.agent_key || "") : "";
+  // a view lives in the hash, so a bookmark, a screenshot and a bug report can all
+  // name the same screen instead of "the second tab, after clicking the third crew"
+  if (location.hash) {
+    var hash = location.hash.replace(/^#\/?/, "");
+    var parts = hash.split("/");
+    if (VIEWS.indexOf(parts[0]) !== -1) state.view = parts[0];
+    // #workflows/<id> opens that definition, so a workflow can be linked to
+    if (parts[0] === "workflows" && parts[1]) state.pendingWorkflow = parts[1];
+  }
 
   var tabs = document.getElementById("tabs");
   tabs.textContent = "";
   VIEWS.forEach(function (view) {
     tabs.appendChild(el("a", {
-      href: "#", "aria-current": state.view === view ? "page" : "false", text: view,
-      onclick: function (event) { event.preventDefault(); state.view = view; renderHeader(); renderView(); }
+      href: "#" + view, "aria-current": state.view === view ? "page" : "false", text: view,
+      onclick: function (event) {
+        event.preventDefault(); state.view = view; history.replaceState(null, "", "#" + view);
+        renderHeader(); renderView();
+      }
     }));
   });
 }
@@ -263,7 +275,7 @@ async function renderBoard(view, params) {
         try {
           await api(R.moveTask, { task: task.id }, {
             method: "POST", headers: { "content-type": "application/json" },
-            body: JSON.stringify({ column: move.value, actor: state.agent.name })
+            body: JSON.stringify({ column: move.value, actor: state.agent.id })
           });
           say("moved " + task.id + " to " + move.value);
           renderView();
@@ -468,6 +480,13 @@ var WORKFLOW_TYPES = ["agent_task","shell","set_context","human_gate","branch","
 
 async function renderWorkflows(view, params) {
   var data = await api(R.workflows, { team: params.team });
+  if (state.pendingWorkflow) {
+    // a deep link fetches the definition it names, once, then behaves like a click
+    var wantedId = state.pendingWorkflow;
+    state.pendingWorkflow = null;
+    try { state.workflow = await api(R.workflow, { workflow: wantedId }); }
+    catch (err) { say(err.message, true); }
+  }
   var panel = el("div", { class: "panel" }, [el("h2", { text: "workflows" })]);
   var list = data.workflows || [];
   if (!list.length) {
@@ -634,13 +653,17 @@ async function renderSidecars(view, params) {
 async function renderGuardrails(view, params) {
   var data = await api(R.guardrails, { team: params.team });
   var panel = el("div", { class: "panel" }, [el("h2", { text: "guardrails" })]);
-  var today = data.summary || {};
+  // the api answers {guardrails, refused_today}. the page used to read
+  // {summary, limits}, so the limits panel never rendered a single row and its pause
+  // button, which is the only way to stand down a limit from here, was unreachable.
+  var limits = data.guardrails || [];
+  var today = data.refused_today || {};
   var refused = today.refused || {};
   var names = Object.keys(refused);
   panel.appendChild(el("div", { class: "meta", text: names.length
     ? "refused today: " + names.map(function (k) { return k + " " + refused[k]; }).join(", ")
     : "nothing refused today" }));
-  (data.limits || []).forEach(function (limit) {
+  limits.forEach(function (limit) {
     panel.appendChild(el("div", { class: "card" }, [
       el("div", { text: limit.kind + " = " + JSON.stringify(limit.value) }),
       el("div", { class: "meta", text: (limit.agent_id || "crew-wide") + " · " + limit.status }),
@@ -653,7 +676,7 @@ async function renderGuardrails(view, params) {
       }})
     ]));
   });
-  if (!data.limits || !data.limits.length) {
+  if (!limits.length) {
     panel.appendChild(el("div", { class: "muted", text: "no limits. an agent with no limits is a gate nobody is standing at." }));
   }
   view.appendChild(panel);
@@ -722,6 +745,18 @@ async function boot() {
   if (state.crews.length) await pickTeam(state.crews[0]);
   else { say("no crews yet. POST /crews and this page has something to show."); renderHeader(); }
 }
+
+// a hash change is a navigation even though the document stays: without this, a link
+// to #workflows opened in the same tab leaves the old view on screen
+window.addEventListener("hashchange", function () {
+  var hash = location.hash.replace(/^#\/?/, "");
+  var parts = hash.split("/");
+  if (VIEWS.indexOf(parts[0]) === -1) return;
+  state.view = parts[0];
+  if (parts[0] === "workflows" && parts[1]) state.pendingWorkflow = parts[1];
+  renderHeader();
+  renderView();
+});
 
 boot();
 </script>

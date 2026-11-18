@@ -154,3 +154,27 @@ that reports 904 characters against a 900 budget is a budget that is not one.
 every assembly writes a row in `context_snapshots` with the slice names, per slice counts
 and what was truncated. that row is what the runs view shows and what a question about a
 bad run is answered from. a prompt nobody kept is a claim about a run, not a record of it.
+
+## the shell, checked in a browser
+
+the page suite asserts two things: the shell renders, and every route it calls exists. both
+were true while the shell was broken twice over, which is why a headless browser now runs
+against a seeded database before a release.
+
+it found three defects that no route check could see. the board's move control sent an
+agent's name as the actor, and the move endpoint has taken ids since the review gate was
+enforced, so every move 422'd and the card silently stayed put. the guardrails panel read
+`{summary, limits}` while the endpoint answers `{guardrails, refused_today}`, so it rendered
+"no limits" forever and the pause button, the only way to stand a limit down from the page,
+was never on screen. and a hash change is a navigation even when the document stays, so a
+deep link to `#workflows` pasted into the address bar went nowhere.
+
+the last one produced a feature as well as a fix: views live in the hash and a workflow can
+be linked by id, so a screenshot, a bookmark and a bug report can name the same screen.
+the payload bug produced a test: each view has to read at least one key its endpoint
+actually returns, checked against a live response rather than against a string in the page.
+
+what the run verifies, in a browser, on a real database: a card moves and the api agrees it
+moved, the editor opens a definition containing a loop and a gate, the loop workflow fails
+with its iterations and files a lesson, the gate run parks and answering the gate settles it,
+and the runs view shows the eight slices and their budgets. screenshots land beside the run.
