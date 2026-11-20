@@ -268,6 +268,7 @@ class CrewRunner:
         task = self.kanban.complete(
             task_id, {**result, "run_id": run_id, "agent_id": agent["id"]},
             actor=agent["id"], column="review" if reviewed else "done",
+            evidence=f"run:{run_id}",
         )
         return {
             "run_id": run_id,

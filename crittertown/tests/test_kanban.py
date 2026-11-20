@@ -32,8 +32,9 @@ class TaskTests(AppCase):
         task = self.task(team["id"])
         self.kanban.move(task["id"], "in_progress")
         self.kanban.move(task["id"], "review")
-        done = self.kanban.move(task["id"], "done")
+        done = self.kanban.move(task["id"], "done", evidence="commit:abc1234")
         self.assertEqual(done["column"], "done")
+        self.assertEqual(done["evidence_ref"], "commit:abc1234")
         kinds = [e["kind"] for e in self.kanban.events(task["id"])]
         self.assertEqual(kinds.count("moved"), 3)
 
@@ -85,7 +86,7 @@ class TaskTests(AppCase):
         team = self.crew()
         task = self.task(team["id"])
         self.kanban.move(task["id"], "in_progress")
-        done = self.kanban.complete(task["id"], {"answer": 42})
+        done = self.kanban.complete(task["id"], {"answer": 42}, evidence="run:run_42")
         self.assertEqual(done["column"], "done")
         self.assertEqual(done["result"]["answer"], 42)
 

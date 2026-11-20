@@ -201,3 +201,25 @@ evidence arrives with the completion: `run:<id>` is written to the card, and the
 that decides which references can prove which kind of work is the next thing to land, so
 that a commit is signed off with a commit and a deal with a receipt.
 
+## the gate demands a reference, and the kind decides which
+
+the review gate was real in one direction and decorative in the other. an agent could not
+sign its own work, which was right, and a person could sign anything with a sentence, which
+made the gate a formality with a witness.
+
+so a card now carries a `kind`, and a kind decides which references close it: code on
+`commit:` or `run:`, financial on `stripe:` or `payout:` or `invoice:`, research on a
+`sheet:` or a `sql:` or a `source:`, support on a `ticket:`. the scheme is checked, the
+payload is not, because the point is that a reference points at something a person can go
+and look at, and a sentence does not. `gate:` closes any kind, since a recorded decision is
+a row with who, when and why in it, and that is a pointer too.
+
+a crew may narrow the list for its own kinds and may never widen it. the direction matters:
+widening is the request an agent under pressure would make, and a narrowing that is not a
+subset refuses the card rather than silently accepting more than the kind allows.
+
+the short way to done walks the same check as the long way, because a gate with a bypass is
+a suggestion. the runner writes `run:<id>` when it finishes, so a dispatched card has its
+reference before anyone signs it, and a routine writes its receipt. when the shell closes a
+card it asks for the reference rather than inventing one.
+

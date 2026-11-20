@@ -925,7 +925,18 @@ def create_api(app: App | None = None) -> FastAPI:
     def move_task(task_id: str, payload: dict = Body(...)) -> dict:
         data = body(payload)
         return app.kanban.move(
-            task_id, data.get("column", ""), actor=str(data.get("actor", "owner")), note=data.get("note", "")
+            task_id, data.get("column", ""), actor=str(data.get("actor", "owner")),
+            note=data.get("note", ""), evidence=str(data.get("evidence", "")),
+        )
+
+    @api.post("/tasks/{task_id}/approve")
+    def approve_task(task_id: str, payload: dict = Body(default={})) -> dict:
+        """the review gate, with the reference that closes the card. the kind of work
+        decides which references count, so the refusal names the scheme it wanted."""
+        data = body(payload)
+        return app.kanban.approve(
+            task_id, actor=str(data.get("actor", "owner")), note=data.get("note", ""),
+            evidence=str(data.get("evidence", "")),
         )
 
     @api.post("/tasks/{task_id}/assign")

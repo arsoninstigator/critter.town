@@ -90,11 +90,25 @@ nest. routing a card to a department puts it on the coordinator's desk, and esca
 walks up the reporting line as a gated a2a message. hierarchy for accountability,
 channels for conversation.
 
+### evidence
+the reference that closes a card, and the reason the review gate is worth walking. a
+reference has a scheme and a payload (`commit:abc1234`, `run:run_9`, `invoice:inv_88`),
+never a sentence, and the card's `kind` decides which schemes count: code on a commit or a
+run, financial on a receipt from whoever holds the money, support on a ticket. a crew may
+narrow that list and may not widen it, because widening is how a gate quietly stops meaning
+anything. `gate:` closes any kind, since a recorded decision is a row with who, when and
+why in it.
+
 ### gate
 an approval that needs a link, not a login. a `human_gate` node, or a run that failed,
 opens a gate with signed single-use tokens; the paper trail is the row, the question
 travels to the crew channel, and one tap on the link decides it. links expire, are bound
 to one decision, and are refused after use. tables: `gates`, `gate_tokens`.
+
+### kind
+what sort of work a card is: code, design, research, security, financial, media, ops,
+accounting, support, doc. it is the axis the board was missing, because every gate and
+every acceptance rule had been written for code and silently applied to a deal.
 
 ### handoff
 the shift change, with a body. at every boundary the incoming agent gets a bundle: open

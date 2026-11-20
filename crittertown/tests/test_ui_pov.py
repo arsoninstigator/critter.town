@@ -55,7 +55,7 @@ class PageShapeTests(unittest.TestCase):
         methods = re.findall(r'method:\s*"(\w+)"', POV_PAGE)
         self.assertEqual(sorted(methods),
                          ["DELETE", "DELETE", "POST", "POST", "POST", "POST", "POST",
-                          "POST", "POST", "POST", "PUT"])
+                          "POST", "POST", "POST", "POST", "PUT"])
         for name in WRITES:
             self.assertIn(name, routes_in(POV_PAGE))
 

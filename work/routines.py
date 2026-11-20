@@ -278,10 +278,12 @@ class RoutineService:
                 (notes or "", ts, run["id"]),
             )
         if run["task_id"]:
-            self._close_card(run["task_id"], actor, notes)
+            # the receipt is the reference that closes the card: a routine is work that
+            # happened on a day, and the run row is the record of that day
+            self._close_card(run["task_id"], actor, notes, evidence=f"run:{run['id']}")
         return self.run_for(routine_id, on_date) or run
 
-    def _close_card(self, task_id: str, actor: str, notes: str) -> None:
+    def _close_card(self, task_id: str, actor: str, notes: str, evidence: str = "") -> None:
         """move the card to done by a path the board allows. a routine has no review
         step to argue about, but the board still owns its transitions, so the routine
         walks them rather than reaching over them."""
@@ -297,7 +299,7 @@ class RoutineService:
             except ValidationError:
                 break
         try:
-            self.kanban.approve(task_id, actor)
+            self.kanban.approve(task_id, actor, evidence=evidence)
         except ValidationError:
             # an agent cannot sign off its own work, so an agent-completed routine parks
             # in review. that is the gate doing its job, and the receipt still records
