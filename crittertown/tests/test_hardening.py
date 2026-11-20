@@ -45,12 +45,13 @@ class ReviewIsAGateTests(AppCase):
 
     def test_the_owner_can_sign_it(self) -> None:
         task = self.kanban.move(self.card()["id"], "review", self.wren["id"])
-        closed = self.kanban.move(task["id"], "done", "owner")
+        closed = self.kanban.move(task["id"], "done", "owner", evidence="commit:abc1234")
         self.assertEqual(closed["column"], "done")
 
     def test_another_agent_can_sign_it(self) -> None:
         task = self.kanban.move(self.card()["id"], "review", self.wren["id"])
-        closed = self.kanban.move(task["id"], "done", self.other["id"])
+        closed = self.kanban.move(task["id"], "done", self.other["id"],
+                                  evidence="commit:def5678")
         self.assertEqual(closed["column"], "done")
 
     def test_an_actor_that_does_not_exist_is_not_a_person(self) -> None:
@@ -74,7 +75,7 @@ class ReviewIsAGateTests(AppCase):
 
     def test_approve_walks_the_gate_instead_of_jumping_it(self) -> None:
         task = self.card()
-        closed = self.kanban.approve(task["id"], "owner")
+        closed = self.kanban.approve(task["id"], "owner", evidence="commit:abc1234")
         self.assertEqual(closed["column"], "done")
         columns = [e["data"]["to"] for e in self.kanban.events(task["id"]) if e["kind"] == "moved"]
         self.assertEqual(columns[-2:], ["review", "done"])

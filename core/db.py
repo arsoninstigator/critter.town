@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SCHEMA = """
 create table if not exists meta (
@@ -780,6 +780,9 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
         "blocked_reason": "text not null default ''",
         "claim_deadline_at": "real",
         "next_action_at": "real",
+        # v13: what kind of work this is. it decides which evidence can close the card,
+        # because a gate that accepts a sentence for a commit is not a gate
+        "kind": "text not null default 'code'",
     },
     # which side wrote the row: the app, or the signed log behind it
     "channel_messages": {"via": "text not null default 'app'"},

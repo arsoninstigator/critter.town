@@ -855,8 +855,10 @@ class WorkflowService:
         if decision not in {"approved", "rejected"}:
             raise ValidationError("decision must be 'approved' or 'rejected'")
         if node.get("task_id"):
-            # a person just answered the gate, so this is the approval, not a skip
-            self.kanban.approve(node["task_id"], "owner", note=note)
+            # a person just answered the gate, so this is the approval, not a skip. the
+            # reference is the decision row, so the card points at who said yes and when
+            reference = f"gate:{node.get('gate_id') or run_id}"
+            self.kanban.approve(node["task_id"], "owner", note=note, evidence=reference)
         if self.gates is not None and node.get("gate_id"):
             try:
                 self.gates.decide(node["gate_id"], decision=decision, actor="owner", note=note)

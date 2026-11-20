@@ -122,6 +122,16 @@ curl -X POST localhost:8000/agents/$AGENT/vault -H 'content-type: application/js
 - revoking writes a row and an audit entry (`vault.revoked`). the grant history is the
   point: an audit trail that deletes itself is not one
 
+### closing a card: the evidence gate
+
+- `POST /tasks/{id}/approve` takes `{actor, note, evidence}` and walks the card to done.
+  the evidence is checked before the card moves, so a refusal never leaves a half approved
+  card behind
+- `POST /tasks/{id}/move` takes `evidence` too, and refuses a move to `done` without one,
+  so the gate cannot be routed around
+- the card's `kind` (set at creation, one of ten) decides which schemes count, and the
+  refusal names the schemes it wanted. a crew's `orchestration.evidence` may narrow them
+
 ### custody: who holds a card
 
 - `GET /tasks/{id}/custody` returns the holder, the lease expiry, the attempt count and

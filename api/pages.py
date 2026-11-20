@@ -106,6 +106,7 @@ var R = {
   grant: "agents/{agent}/grants/{kind}/{resource}",
   isolation: "crews/{team}/isolation",
   moveTask: "tasks/{task}/move",
+  approveTask: "tasks/{task}/approve",
   routines: "crews/{team}/routines",
   routineDone: "routines/{routine}/done",
   routinePause: "routines/{routine}/pause",
@@ -273,6 +274,22 @@ async function renderBoard(view, params) {
       move.value = column.name;
       move.onchange = async function () {
         try {
+          // closing a card needs the reference that proves it, and the kind of work
+          // decides which references count, so the page asks instead of inventing one
+          if (move.value === "done") {
+            var evidence = window.prompt(
+              "what closes this " + (task.kind || "code") + " card? e.g. commit:abc1234, " +
+              "run:run_9, ticket:123", task.evidence_ref || "");
+            if (!evidence) { say("a card is closed with a reference, not a click", true);
+              renderView(); return; }
+            await api(R.approveTask, { task: task.id }, {
+              method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ actor: state.agent.id, evidence: evidence })
+            });
+            say("closed " + task.id + " on " + evidence);
+            renderView();
+            return;
+          }
           await api(R.moveTask, { task: task.id }, {
             method: "POST", headers: { "content-type": "application/json" },
             body: JSON.stringify({ column: move.value, actor: state.agent.id })

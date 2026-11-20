@@ -19,6 +19,7 @@ from core.db import Store, dumps, loads, new_id, now
 CLAIM_WINDOW_SECONDS = 900.0
 LEASE_SECONDS = 300.0
 from core.errors import NotFound, ValidationError
+from work.evidence import KINDS, evidence_fits, expected
 
 def patch_for(column: str, ts: float) -> dict:
     """the deadlines a column implies.
@@ -79,9 +80,12 @@ class KanbanService:
         payload: dict | None = None,
         parent_id: str | None = None,
         channel_id: str | None = None,
+        kind: str = "code",
     ) -> dict:
         if not title:
             raise ValidationError("task title is required")
+        if kind not in KINDS:
+            raise ValidationError(f"kind must be one of {list(KINDS)}", kind=kind)
         if isolation not in {"agent", "ephemeral"}:
             raise ValidationError("isolation must be 'agent' or 'ephemeral'")
         columns = self.columns(team_id)
@@ -94,12 +98,13 @@ class KanbanService:
             c.execute(
                 """insert into tasks (id, team_id, parent_id, title, description, column_name,
                        priority, assignee_agent_id, required_skills, isolation, payload, result,
-                       channel_id, claim_deadline_at, next_action_at, created_date, updated_date)
-                   values (?,?,?,?,?,?,?,?,?,?,?, '{}', ?, ?, ?, ?, ?)""",
+                       channel_id, claim_deadline_at, next_action_at, kind, created_date,
+                       updated_date)
+                   values (?,?,?,?,?,?,?,?,?,?,?, '{}', ?, ?, ?, ?, ?, ?)""",
                 (
                     task_id, team_id, parent_id, title, description, column, int(priority),
                     assignee_agent_id, dumps(required_skills or []), isolation,
-                    dumps(payload or {}), channel_id, deadline, deadline, ts, ts,
+                    dumps(payload or {}), channel_id, deadline, deadline, kind, ts, ts,
                 ),
             )
         self._event(task_id, "created", "system", {"column": column, "title": title})
@@ -227,16 +232,56 @@ class KanbanService:
                     "or another agent",
                     task_id=task["id"], actor=actor)
 
-    def approve(self, task_id: str, actor: str, note: str = "") -> dict:
-        """walk a card to done the long way, so the gate is walked and not skipped."""
+    def approve(self, task_id: str, actor: str, note: str = "", evidence: str = "") -> dict:
+        """walk a card to done the long way, so the gate is walked and not skipped.
+
+        the evidence is checked before the card moves, because a refusal after the move
+        leaves a done card with nothing behind it. the kind of work decides which
+        references count; the card's own evidence (a run, say) counts if nobody names a
+        better one.
+        """
         task = self.get_task(task_id)
+        reference = self._evidence_for(task, evidence)
         if task["column"] == "in_progress":
             task = self.move(task_id, "review", actor, note=note)
         if task["column"] != "done":
-            task = self.move(task_id, "done", actor, note=note)
+            task = self.move(task_id, "done", actor, note=note, evidence=reference)
         return task
 
-    def move(self, task_id: str, column: str, actor: str = "system", note: str = "") -> dict:
+    def _evidence_for(self, task: dict, evidence: str = "") -> str:
+        """the reference that closes this card, or a refusal that says what it wanted."""
+        reference = (evidence or task.get("evidence_ref") or "").strip()
+        if not reference:
+            raise ValidationError(
+                f"a {task.get('kind', 'code')} card is closed with a reference: "
+                f"{' or '.join(s + ':' for s in expected(task.get('kind', 'code')))}",
+                task_id=task["id"], kind=task.get("kind", "code"),
+                expected=expected(task.get("kind", "code")))
+        try:
+            ok, reason = evidence_fits(task.get("kind", "code"), reference,
+                                       self._narrowed(task["team_id"], task.get("kind", "code")))
+        except ValueError as widened:
+            # a crew's own evidence policy that widens the kind is a configuration bug,
+            # and it refuses the card rather than quietly accepting more than it should
+            raise ValidationError(str(widened), task_id=task["id"],
+                                  kind=task.get("kind", "code")) from widened
+        if not ok:
+            raise ValidationError(reason, task_id=task["id"],
+                                  kind=task.get("kind", "code"),
+                                  expected=expected(task.get("kind", "code")))
+        return reference
+
+    def _narrowed(self, team_id: str, kind: str) -> list[str] | None:
+        """a crew may narrow what closes a card of a given kind, never widen it."""
+        row = self.store.one("select orchestration from teams where id = ?", (team_id,))
+        if not row:
+            return None
+        policy = loads(row["orchestration"], {})
+        evidence = policy.get("evidence") or {}
+        return evidence.get(kind)
+
+    def move(self, task_id: str, column: str, actor: str = "system", note: str = "",
+             evidence: str = "") -> dict:
         task = self.get_task(task_id)
         columns = self.columns(task["team_id"])
         if column not in columns:
@@ -251,6 +296,10 @@ class KanbanService:
             )
         self._check_actor(task, actor, column)
         patch = patch_for(column, now())
+        if column == "done":
+            # the short way to done is still the gate: evidence is checked here too, so
+            # a caller cannot skip approve() and land a card with nothing behind it
+            patch["evidence_ref"] = self._evidence_for(task, evidence)
         if note and column == "review":
             patch["review_note"] = note
         with self.store.tx() as c:
@@ -280,7 +329,8 @@ class KanbanService:
         return self.get_task(task_id)
 
     def complete(
-        self, task_id: str, result: dict | None = None, actor: str = "system", column: str = "done"
+        self, task_id: str, result: dict | None = None, actor: str = "system",
+        column: str = "done", evidence: str = "",
     ) -> dict:
         task = self.get_task(task_id)
         with self.store.tx() as c:
@@ -294,8 +344,10 @@ class KanbanService:
         # finishing work is not approving it. walk the gate if this actor may, and park
         # in review if it may not, which is what an agent gets.
         try:
-            return self.approve(task_id, actor)
+            return self.approve(task_id, actor, evidence=evidence)
         except ValidationError:
+            # no reference yet, or an actor that may not sign. either way the card parks
+            # in review, where the gate can be walked by someone who can
             return self.move(task_id, "review", actor)
 
     def events(self, task_id: str) -> list[dict]:
@@ -342,6 +394,7 @@ class KanbanService:
             "attempts": int(row["attempts"] or 0),
             "max_attempts": int(row["max_attempts"] or 3),
             "evidence_ref": row["evidence_ref"] or "",
+            "kind": row["kind"] or "code",
             "blocked_reason": row["blocked_reason"] or "",
             "claim_deadline_at": row["claim_deadline_at"],
             "next_action_at": row["next_action_at"],
