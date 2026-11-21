@@ -53,6 +53,8 @@ from work.custody import Custody
 from work.liveness import Liveness
 from work.evals import EvalService
 from work.convergence import ConvergenceService
+from work.delegation import DelegationService
+from work.budget import BudgetService
 
 
 @dataclass
@@ -96,6 +98,8 @@ class App:
     liveness: Liveness
     evals: EvalService
     convergence: ConvergenceService
+    delegation: DelegationService
+    budget: BudgetService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -228,6 +232,15 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     convergence = ConvergenceService(store, kanban=kanban)
     runner.convergence = convergence
     kanban.convergence = convergence
+    # delegation is the handoff and the breakdown: who owes the work, and which
+    # parts of a split have nobody on them
+    delegation = DelegationService(store, crews=crews, kanban=kanban,
+                                   audit=audit, convergence=convergence)
+    # the ledger the spend guardrail reads, so the limit is measured against money that
+    # is spent plus money that is committed
+    budget = BudgetService(store, guardrails=guardrails)
+    guardrails.budget = budget
+    runner.budget = budget
     # the runner asks the profile which relation an agent has, because a sidecar may not
     # be handed a card of its own
     runner.profile = profile
@@ -339,6 +352,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         liveness=liveness,
         evals=evals,
         convergence=convergence,
+        delegation=delegation,
+        budget=budget,
         polls=polls,
         browsers=browsers,
         ops=ops,

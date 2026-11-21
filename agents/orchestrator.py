@@ -59,6 +59,8 @@ class CrewRunner:
         self.custody = None
         # set by the composition root: a fan-out closes on a record, not on a hope
         self.convergence = None
+        # set by the composition root: the ledger a declared budget is reserved in
+        self.budget = None
         self.knowledge = None
         # set by the composition root: the prompt is assembled from slices
         self.context = None
@@ -159,6 +161,15 @@ class CrewRunner:
         # tokens and a convergence, and it is what a big-feeling task asks for
         if topology is not None:
             topology.check_declared(task.get("payload"), topology.signals_of(task))
+        reservation = None
+        if self.budget is not None:
+            declared = (task.get("payload") or {}).get("budget_cents")
+            if declared:
+                # the check and the claim are one act, so two parallel cards cannot both
+                # read the same under-budget number and both proceed
+                reservation = self.budget.hold(
+                    task["team_id"], declared, task_id=task_id, agent_id=agent["id"],
+                    reason=f"run of {task['title'][:60]}")
         # custody before the column: a card in progress that nobody holds is the state
         # that used to need a person to notice it
         if self.custody is not None:
@@ -248,6 +259,13 @@ class CrewRunner:
                 except CritterTownError:
                     # the lease is gone, so the sweep is the one that can reclaim it
                     target = "blocked"
+            if reservation is not None and self.budget is not None:
+                # the work did not happen, so the reservation goes back rather than
+                # settling at the estimate and quietly charging for a failure
+                try:
+                    self.budget.release(reservation["id"], reason=error[:200])
+                except CritterTownError:
+                    pass
             self.kanban.move(task_id, target, agent["id"], note=error[:500])
             if self.convergence is not None:
                 # a lane that failed is a blocked report, not a silence: the barrier has
@@ -296,6 +314,9 @@ class CrewRunner:
             actor=agent["id"], column="review" if reviewed else "done",
             evidence=f"run:{run_id}",
         )
+        if reservation is not None and self.budget is not None:
+            spent = (task.get("payload") or {}).get("spent_cents")
+            self.budget.settle(reservation["id"], spent)
         if self.convergence is not None:
             lane = self.convergence.for_partition(task_id)
             if lane:

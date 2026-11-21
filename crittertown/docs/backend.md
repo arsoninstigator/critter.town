@@ -264,3 +264,15 @@ same shape with one manual step.
 | `CRITTERTOWN_GATE_SECRET` | signs approval links; generated per db when unset |
 | `CRITTERTOWN_PUBLIC_BASE_URL` | the host approval links are built against |
 | `CRITTERTOWN_API_TOKEN` | shared bearer token for machines |
+
+## delegation, budget, health
+
+- `POST /crews/{id}/delegations` offers a handoff, `POST /delegations/{id}/answer` accepts
+  or rejects it, `POST /crews/{id}/delegations/sweep` expires the silent ones.
+- `POST /tasks/{id}/breakdown` splits a card into owned parts and opens the barrier.
+- `POST /crews/{id}/budget/reserve`, `POST /budget/{id}/settle`, `POST /budget/{id}/release`,
+  `GET /crews/{id}/budget`. the spend guardrail reads the same ledger.
+- `POST /crews/{id}/roster` and `GET /roster/roles` for seats and their slices,
+  `GET /agent-kinds` for the four kinds of worker.
+- `GET /health` is liveness with counts; `GET /health/ready` is readiness and answers 503
+  when the store does not.

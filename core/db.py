@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 SCHEMA = """
 create table if not exists meta (
@@ -694,6 +694,49 @@ create table if not exists convergences (
 );
 create index if not exists convergences_task on convergences (task_id, status);
 
+-- a handoff is the atomic unit of delegation: state crosses the boundary, a summary
+-- does not, so an offer carries a reference and a precondition and never a paragraph.
+create table if not exists delegations (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null default '',
+    from_agent_id text not null,
+    to_agent_id text not null,
+    payload_ref text not null,
+    precondition text not null,
+    acceptance_required integer not null default 1,
+    timeout_seconds real not null default 3600,
+    state text not null default 'offered',
+    note text not null default '',
+    offered_at real not null,
+    accepted_at real,
+    reason text not null default '',
+    created_date real not null,
+    updated_date real not null
+);
+create index if not exists delegations_team on delegations (team_id, state, created_date);
+create index if not exists delegations_to on delegations (to_agent_id, state);
+
+-- budget as a reservation: the check and the claim are the same act, so two parallel
+-- cards cannot both read the same under-budget number and both proceed.
+create table if not exists budget_reservations (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null default '',
+    run_id text not null default '',
+    agent_id text not null default '',
+    amount_cents real not null,
+    currency text not null default 'usd',
+    state text not null default 'held',
+    reason text not null default '',
+    settled_cents real,
+    over_spend integer not null default 0,
+    created_date real not null,
+    settled_at real,
+    updated_date real not null
+);
+create index if not exists budget_reservations_team on budget_reservations (team_id, state, created_date);
+
 -- an eval: a grid of scenarios and candidates, one deterministic scorer, one row per
 -- cell. the grid is stored with the run so a report can still be read after the code
 -- that produced it has moved on.
@@ -842,6 +885,10 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
         # what the agent is good at, and the lines of work it serves
         "specializations": "text not null default '[]'",
         "verticals": "text not null default '[]'",
+        # v16: what kind of worker this is (code, research, factory, orchestrator,
+        # general). a kind caps the seat roles it may fill and the slices it may read,
+        # so "the research agent" is a rule rather than a name someone remembers.
+        "kind": "text not null default 'general'",
     },
     # a spawn is a principal with a parent, and a lane in a fan-out
     "agent_spawns": {

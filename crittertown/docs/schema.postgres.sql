@@ -674,6 +674,49 @@ create table if not exists convergences (
 );
 create index if not exists convergences_task on convergences (task_id, status);
 
+-- a handoff is the atomic unit of delegation: state crosses the boundary, a summary
+-- does not, so an offer carries a reference and a precondition and never a paragraph.
+create table if not exists delegations (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null default '',
+    from_agent_id text not null,
+    to_agent_id text not null,
+    payload_ref text not null,
+    precondition text not null,
+    acceptance_required integer not null default 1,
+    timeout_seconds double precision not null default 3600,
+    state text not null default 'offered',
+    note text not null default '',
+    offered_at double precision not null,
+    accepted_at double precision,
+    reason text not null default '',
+    created_date double precision not null,
+    updated_date double precision not null
+);
+create index if not exists delegations_team on delegations (team_id, state, created_date);
+create index if not exists delegations_to on delegations (to_agent_id, state);
+
+-- budget as a reservation: the check and the claim are the same act, so two parallel
+-- cards cannot both read the same under-budget number and both proceed.
+create table if not exists budget_reservations (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null default '',
+    run_id text not null default '',
+    agent_id text not null default '',
+    amount_cents double precision not null,
+    currency text not null default 'usd',
+    state text not null default 'held',
+    reason text not null default '',
+    settled_cents double precision,
+    over_spend integer not null default 0,
+    created_date double precision not null,
+    settled_at double precision,
+    updated_date double precision not null
+);
+create index if not exists budget_reservations_team on budget_reservations (team_id, state, created_date);
+
 -- an eval: a grid of scenarios and candidates, one deterministic scorer, one row per
 -- cell. the grid is stored with the run so a report can still be read after the code
 -- that produced it has moved on.

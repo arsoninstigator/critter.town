@@ -186,8 +186,14 @@ class CrewService:
         specializations: list[str] | None = None,
         verticals: list[str] | None = None,
         persistence: str | None = None,
+        kind: str = "general",
     ) -> dict:
         self.get_team(team_id)
+        # a kind caps the seats an agent may fill and the slices it may read, so it is
+        # checked where the agent is made rather than trusted where it is used
+        from agents import archetypes
+
+        kind = archetypes.validate(kind)
         persistence = persistence or (runtime or {}).get("persistence") or "workspace"
         if persistence not in PERSISTENCE_MODES:
             raise ValidationError(f"persistence must be one of {list(PERSISTENCE_MODES)}")
@@ -218,12 +224,13 @@ class CrewService:
                 c.execute(
                     """insert into agents
                        (id, team_id, name, role, model, system_prompt, skills, tools, runtime, status,
-                        agent_key, scope, specializations, verticals, created_date, updated_date)
-                       values (?,?,?,?,?,?,?,?,?,'idle',?,?,?,?,?,?)""",
+                        agent_key, scope, specializations, verticals, kind, created_date,
+                        updated_date)
+                       values (?,?,?,?,?,?,?,?,?,'idle',?,?,?,?,?,?,?)""",
                     (
                         agent_id, team_id, name, role, model, system_prompt,
                         dumps(skills or []), dumps(tools or []), dumps(rt),
-                        agent_key, dumps(agent_scope), dumps(specs), dumps(verts), ts, ts,
+                        agent_key, dumps(agent_scope), dumps(specs), dumps(verts), kind, ts, ts,
                     ),
                 )
                 c.execute(
@@ -435,6 +442,7 @@ class CrewService:
             "team_id": row["team_id"],
             "name": row["name"],
             "role": row["role"],
+            "kind": row["kind"] if "kind" in row.keys() else "general",
             "model": row["model"],
             "system_prompt": row["system_prompt"],
             "skills": loads(row["skills"], []),

@@ -293,3 +293,11 @@ missing a slice it needs is a seat doing the job blind.
 the split that keeps it honest: decided is about the shape, staffed is about the crew. a
 roster with no agents is a correct answer to the wrong question, and it says so.
 
+
+## delegation is three rules, not a message bus
+
+a handoff carries a reference and a precondition, never a summary, and expiry is an event
+so a silent drop becomes a row. an envelope names its authority and a hop limit, and a
+delivery stops retrying before its ttl instead of spending budget to hand over something
+the receiver must reject on arrival. authority is an intersection with a trace: the level
+that dropped a tool is named, and a secondment spends nothing unless its scope says so.

@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Body, FastAPI, Query, Request
+from fastapi import Body, FastAPI, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from comms import human as a2a_human
@@ -83,6 +83,21 @@ def create_api(app: App | None = None) -> FastAPI:
     @api.get("/health")
     def health() -> dict:
         return {"ok": True, "counts": app.counts(), "providers": app.registry.status()}
+
+    @api.get("/health/ready")
+    def health_ready(response: Response) -> dict:
+        """the store answers, or this is not ready. /health says the process is up, which
+        a container can be while its database is missing; this is the one a load balancer
+        should read, so it fails instead of reporting a cheerful count of zero."""
+        try:
+            row = app.store.one("select 1 as one")
+            ready = bool(row and row["one"] == 1)
+        except Exception as exc:  # noqa: BLE001 - a broken store is the answer, not a crash
+            response.status_code = 503
+            return {"ok": False, "store": f"{type(exc).__name__}: {exc}"[:200]}
+        if not ready:
+            response.status_code = 503
+        return {"ok": ready, "store": "ok"}
 
     @api.get("/providers")
     def providers() -> dict:
@@ -909,6 +924,62 @@ def create_api(app: App | None = None) -> FastAPI:
     def roster_roles() -> dict:
         return {"roles": {role: list(slices) for role, slices in formation.ROLE_SLICES.items()},
                 "shapes": {shape: list(seats) for shape, seats in formation.SHAPE_SEATS.items()}}
+
+    # ---- delegation, budget, agent kinds -------------------------------
+    @api.post("/crews/{team_id}/delegations")
+    def offer_handoff(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.delegation.offer(
+            team_id, str(data.get("from_agent_id", "")), str(data.get("to_agent_id", "")),
+            str(data.get("payload_ref", "")), str(data.get("precondition", "")),
+            timeout_seconds=float(data.get("timeout_seconds", 3600)),
+            task_id=str(data.get("task_id", "")), note=str(data.get("note", "")))
+
+    @api.get("/crews/{team_id}/delegations")
+    def list_handoffs(team_id: str, state: str | None = None) -> dict:
+        return {"handoffs": app.delegation.list(team_id, state=state)}
+
+    @api.post("/delegations/{handoff_id}/answer")
+    def answer_handoff(handoff_id: str, payload: dict = Body(...)) -> dict:
+        return app.delegation.answer(handoff_id, body(payload))
+
+    @api.post("/crews/{team_id}/delegations/sweep")
+    def sweep_handoffs(team_id: str) -> dict:
+        return app.delegation.sweep(team_id)
+
+    @api.post("/tasks/{task_id}/breakdown")
+    def break_down_task(task_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.delegation.breakdown(task_id, data.get("parts") or [],
+                                        join=data.get("join", "all"),
+                                        quorum=data.get("quorum"))
+
+    @api.post("/crews/{team_id}/budget/reserve")
+    def reserve_budget(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.budget.hold(
+            team_id, float(data.get("amount_cents", 0)), task_id=str(data.get("task_id", "")),
+            run_id=str(data.get("run_id", "")), agent_id=str(data.get("agent_id", "")),
+            reason=str(data.get("reason", "")))
+
+    @api.post("/budget/{reservation_id}/settle")
+    def settle_budget(reservation_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload)
+        return app.budget.settle(reservation_id, data.get("spent_cents"))
+
+    @api.post("/budget/{reservation_id}/release")
+    def release_budget(reservation_id: str, payload: dict = Body(default={})) -> dict:
+        return app.budget.release(reservation_id, str(body(payload).get("reason", "")))
+
+    @api.get("/crews/{team_id}/budget")
+    def read_budget(team_id: str) -> dict:
+        return app.budget.summary(team_id)
+
+    @api.get("/agent-kinds")
+    def agent_kinds() -> dict:
+        from agents import archetypes
+
+        return {"kinds": archetypes.describe()}
 
     # ---- convergence ---------------------------------------------------
     # a fan-out closes on a record: the partition map, the join rule and the reports.
