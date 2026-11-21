@@ -420,6 +420,11 @@ class KanbanService:
             "blocked_reason": row["blocked_reason"] or "",
             "claim_deadline_at": row["claim_deadline_at"],
             "next_action_at": row["next_action_at"],
+            # the watchdog's view of the card: what it wrote last, and whether it is
+            # itself a recovery card (a recovery card is never watched by the watchdog)
+            "last_output_at": row["last_output_at"] if "last_output_at" in row.keys() else None,
+            "output_seq": int(row["output_seq"] or 0) if "output_seq" in row.keys() else 0,
+            "watchdog_of": row["watchdog_of"] if "watchdog_of" in row.keys() else "",
             "created_date": row["created_date"],
             "updated_date": row["updated_date"],
         }

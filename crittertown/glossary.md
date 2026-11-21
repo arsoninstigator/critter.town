@@ -376,3 +376,9 @@ for what was taken and why, `expansion` for what it might grow into), and `assem
 the parts were welded into one thing. `beyond` is for what is not in this repo at all.
 nothing under `theidea/` is imported, built or shipped, which is why it sits outside the
 four roots.
+
+**watchdog.** the part of the sweep that watches output rather than the lease. a held card
+that has written nothing for five minutes is `suspicious`, for fifteen it is `critical` and
+one recovery card is filed. a card can answer the watchdog with a snooze, a continue or a
+dismissal, and a recovery card that goes silent is not watched, so the watchdog never
+cascades into a second watchdog.

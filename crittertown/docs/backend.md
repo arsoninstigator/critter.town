@@ -304,3 +304,17 @@ seats, dispatch and objectives:
 a seat is a column set on `agents` (`seat_state`, `frozen_until`, `burned_reason`, `orphaned`,
 `lineage`, `depth`, `parent_id`), not a table of its own, because the seat is the agent seen as
 a job. objectives and measurements are their own tables. the schema is 18.
+
+output silence:
+
+- `POST /tasks/{id}/output` (agent_id, stream, size) is the holder's heartbeat; nobody else
+  may report output for a card
+- `GET /tasks/{id}/silence` and `GET /crews/{id}/silence` show the level, the age and what
+  suppressed it
+- `POST /tasks/{id}/silence/decide` (decision, actor, reason, snoozed_until) records a
+  snooze, a continue or a dismissal; only the board or the assigned recovery owner may
+- `POST /crews/{id}/silence/escalate` files the recovery cards; `POST /crews/{id}/sweep` runs
+  the lease sweep and this in one call, under a `silence` key
+
+the schema is 19: `tasks` gained `last_output_at`, `output_seq`, `lease_started_at` and
+`watchdog_of`, and `silence_decisions` holds the answers.

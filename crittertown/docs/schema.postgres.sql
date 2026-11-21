@@ -674,6 +674,23 @@ create table if not exists convergences (
 );
 create index if not exists convergences_task on convergences (task_id, status);
 
+-- the watchdog's answers, kept as rows: a snooze is a decision with an end, a dismissal
+-- is a decision with a reason, and both are attributable. an unanswered silence is
+-- recorded by its absence, which is the only honest way to record silence.
+create table if not exists silence_decisions (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null references tasks(id) on delete cascade,
+    decision text not null,
+    snoozed_until double precision,
+    reason text not null default '',
+    actor text not null default 'owner',
+    recovery_task_id text not null default '',
+    created_date double precision not null,
+    updated_date double precision not null
+);
+create index if not exists silence_decisions_task on silence_decisions (task_id, created_date);
+
 -- a handoff is the atomic unit of delegation: state crosses the boundary, a summary
 -- does not, so an offer carries a reference and a precondition and never a paragraph.
 create table if not exists delegations (

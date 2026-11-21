@@ -90,6 +90,10 @@ class Custody:
             "lease_renewals": 0,
             "next_action_at": expires,
             "claim_deadline_at": None,
+            # a fresh holder starts with a fresh silence clock, because the previous
+            # holder's last output says nothing about this one
+            "lease_started_at": ts,
+            "last_output_at": None,
         })
         return {"task_id": task_id, "holder": agent_id, "expires": expires}
 
@@ -118,6 +122,7 @@ class Custody:
             "lease_renewals": 0,
             "next_action_at": None,
             "claim_deadline_at": None,
+            "lease_started_at": None,
             "evidence_ref": evidence or task["evidence_ref"],
         })
         return {"task_id": task_id, "released": True}
@@ -141,6 +146,7 @@ class Custody:
             "lease_expires": None,
             "lease_renewals": 0,
             "attempts": attempts,
+            "lease_started_at": None,
             "blocked_reason": (reason or "")[:500] if spent else "",
             "next_action_at": None if spent else ts + CLAIM_WINDOW_SECONDS,
             "claim_deadline_at": None if spent else ts + CLAIM_WINDOW_SECONDS,
@@ -181,6 +187,7 @@ class Custody:
             "lease_holder": None,
             "lease_expires": None,
             "lease_renewals": 0,
+            "lease_started_at": None,
             "claim_deadline_at": ts + CLAIM_WINDOW_SECONDS,
             "next_action_at": ts + CLAIM_WINDOW_SECONDS,
         })
@@ -190,7 +197,8 @@ class Custody:
         """drop a lease without spending an attempt, for a run that was cancelled.
         the card keeps its attempts, because a release is not a retry."""
         self._write(task_id, {"lease_holder": None, "lease_expires": None,
-                              "lease_renewals": 0, "next_action_at": None})
+                              "lease_renewals": 0, "next_action_at": None,
+                              "lease_started_at": None})
         return {"task_id": task_id, "released": True}
 
     # ---- internals -------------------------------------------------------

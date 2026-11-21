@@ -61,6 +61,9 @@ class CrewRunner:
         self.convergence = None
         # set by the composition root: the ledger a declared budget is reserved in
         self.budget = None
+        # set by the composition root: output is the heartbeat the watchdog reads, so
+        # a lease that renews while the work is silent stops looking alive
+        self.silence = None
         self.knowledge = None
         # set by the composition root: the prompt is assembled from slices
         self.context = None
@@ -227,6 +230,11 @@ class CrewRunner:
                     turn_steps.append({"kind": "a2a", "message_id": posted["id"], "status": posted["status"]})
                 steps.append({"turn": turn, "thought": action.get("thought", ""), "steps": turn_steps})
                 self._update_run(run_id, steps)
+                if self.silence is not None:
+                    # a turn happened, so the work produced something. recorded before
+                    # the renew, because the renew is what makes a silent run look alive
+                    self.silence.record_output(task_id, agent["id"],
+                                               size=len(prompt))
                 if self.custody is not None:
                     try:
                         self.custody.renew(task_id, agent["id"])

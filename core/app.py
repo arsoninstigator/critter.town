@@ -57,6 +57,7 @@ from work.delegation import DelegationService
 from work.budget import BudgetService
 from work.dispatch import DispatchService
 from work.replenish import ReplenishService
+from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
 from work.claims import ClaimService
@@ -114,6 +115,7 @@ class App:
     seats: SeatService
     dispatch: DispatchService
     replenish: ReplenishService
+    silence: SilenceService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -267,6 +269,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     seats = SeatService(store, crews=crews, kanban=kanban, audit=audit, strikes=strikes)
     dispatch = DispatchService(store, kanban=kanban, custody=custody, seats=seats, crews=crews)
     replenish = ReplenishService(store, kanban=kanban, crews=crews)
+    silence = SilenceService(store, kanban=kanban, audit=audit)
+    runner.silence = silence
     guardrails.strikes = strikes
     delegation.seats = seats
     delegation.projects = projects
@@ -396,6 +400,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         seats=seats,
         dispatch=dispatch,
         replenish=replenish,
+        silence=silence,
         polls=polls,
         browsers=browsers,
         ops=ops,

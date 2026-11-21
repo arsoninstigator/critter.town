@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 SCHEMA = """
 create table if not exists meta (
@@ -694,6 +694,23 @@ create table if not exists convergences (
 );
 create index if not exists convergences_task on convergences (task_id, status);
 
+-- the watchdog's answers, kept as rows: a snooze is a decision with an end, a dismissal
+-- is a decision with a reason, and both are attributable. an unanswered silence is
+-- recorded by its absence, which is the only honest way to record silence.
+create table if not exists silence_decisions (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null references tasks(id) on delete cascade,
+    decision text not null,
+    snoozed_until real,
+    reason text not null default '',
+    actor text not null default 'owner',
+    recovery_task_id text not null default '',
+    created_date real not null,
+    updated_date real not null
+);
+create index if not exists silence_decisions_task on silence_decisions (task_id, created_date);
+
 -- a handoff is the atomic unit of delegation: state crosses the boundary, a summary
 -- does not, so an offer carries a reference and a precondition and never a paragraph.
 create table if not exists delegations (
@@ -979,6 +996,15 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
         # v13: what kind of work this is. it decides which evidence can close the card,
         # because a gate that accepts a sentence for a commit is not a gate
         "kind": "text not null default 'code'",
+        # v19: the watchdog's clock. a lease that is renewed while the work is silent
+        # looks alive from the lease alone, so output is recorded as its own fact and
+        # the silence is measured from it.
+        "last_output_at": "real",
+        "output_seq": "integer not null default 0",
+        "lease_started_at": "real",
+        # set on a recovery card: the card whose silence filed it. also the reason a
+        # recovery card that goes silent does not file another one.
+        "watchdog_of": "text not null default ''",
     },
     # which side wrote the row: the app, or the signed log behind it
     "channel_messages": {"via": "text not null default 'app'"},
@@ -1040,6 +1066,8 @@ LATER_INDEXES = (
     "create unique index if not exists agents_key on agents (agent_key)",
     "create unique index if not exists agents_agentid on agents (agentid)",
     "create unique index if not exists agent_spawns_subagent on agent_spawns (subagent_id)",
+    # needs `watchdog_of`, which only exists after _add_columns on a db older than v19
+    "create index if not exists tasks_watchdog on tasks (watchdog_of)",
 )
 
 

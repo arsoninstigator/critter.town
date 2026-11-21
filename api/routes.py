@@ -1205,7 +1205,44 @@ def create_api(app: App | None = None) -> FastAPI:
     @api.post("/crews/{team_id}/sweep")
     def crew_sweep(team_id: str) -> dict:
         app.crews.get_team(team_id)
-        return app.liveness.run(team_id)
+        result = app.liveness.run(team_id)
+        # the sweep reclaims leases; the watchdog reads output. both run here because a
+        # card that is renewing its lease while writing nothing looks healthy to the
+        # first and is exactly what the second exists to see.
+        result["silence"] = app.silence.escalate(team_id)
+        return result
+
+    # ---- output silence -------------------------------------------------
+    # a lease that renews is not evidence of work. output is, so the holder reports it
+    # and the watchdog measures the gap.
+    @api.post("/tasks/{task_id}/output")
+    def record_output(task_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.silence.record_output(
+            task_id, str(data.get("agent_id", "")),
+            stream=str(data.get("stream", "stdout")), size=int(data.get("size") or 0))
+
+    @api.get("/tasks/{task_id}/silence")
+    def read_silence(task_id: str) -> dict:
+        return app.silence.watch(task_id)
+
+    @api.get("/crews/{team_id}/silence")
+    def crew_silence(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.silence.state(team_id)
+
+    @api.post("/tasks/{task_id}/silence/decide")
+    def decide_silence(task_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.silence.decide(
+            task_id, str(data.get("decision", "")),
+            actor=str(data.get("actor", "owner")), reason=str(data.get("reason", "")),
+            snoozed_until=data.get("snoozed_until"))
+
+    @api.post("/crews/{team_id}/silence/escalate")
+    def escalate_silence(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.silence.escalate(team_id)
 
     @api.post("/tasks/{task_id}/replan")
     def replan_task(task_id: str, payload: dict = Body(...)) -> dict:

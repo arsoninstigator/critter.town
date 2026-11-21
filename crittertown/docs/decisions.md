@@ -368,3 +368,30 @@ limit is counted rather than described; a handoff that leaves the crew needs a d
 crossing of kind `request` and a live receiver; and the morning brief carries each open
 project's unmet gate checks, so a stalled phase is a line in the brief rather than something a
 person has to notice on a board.
+
+## the watchdog reads output, not the lease
+
+a lease that renews is not evidence that work is happening. the sweep's existing signal for
+this was the renewal counter, and it is too slow to be useful: with a fifteen minute lease,
+three renewals is forty five minutes in which a hung model looks exactly like a working one.
+so output is recorded as its own fact. `last_output_at` and `output_seq` are written by the
+holder on every turn, `lease_started_at` is written at claim, and the silence is measured
+from `last_output_at`, then `lease_started_at`, then the card's creation. a card that has
+never produced anything is measured from when it became work.
+
+five minutes is `suspicious` and fifteen is `critical`. suspicion is a finding and files
+nothing, because an alarm that acts on a hunch teaches people to mute it. critical files one
+recovery card in the same crew, pointing back with `watchdog_of`, and the second sweep finds
+that card already open instead of filing a second one.
+
+three rules keep it from becoming noise. it only applies to a card somebody holds, because a
+quiet backlog is the point of a backlog. a person can answer with a row: `snooze` (must say
+until when, because an open ended snooze is a mute with a friendlier name), `continue` (buys
+the thirty minute rearm window, not forever), or `dismissed_false_positive`. and only the
+board or the agent the recovery card was assigned to may answer, because a stranger answering
+for a silent run is how a watchdog gets silenced by the thing it is watching.
+
+a recovery card that goes silent files nothing. a cascade is how a watchdog becomes the
+outage. the same rule covers a card that is blocked, whose silence is the durable waiting
+signal the column already carries, and a card that reached done with evidence newer than the
+silence, which is late rather than stuck.
