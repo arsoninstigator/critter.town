@@ -37,6 +37,7 @@ from comms import protocol as a2a_spec
 from agents.agent_imports import AGENT_SOURCES, adopt, export_agent, import_agent
 from agents.context import SLICES
 from work.liveness import violations
+from work import roster as formation
 from work import topology
 from core.app import App, build_app
 from comms.events import Event
@@ -885,6 +886,29 @@ def create_api(app: App | None = None) -> FastAPI:
         task["events"] = app.kanban.events(task_id)
         task["runs"] = app.runner.list_runs(task_id)
         return task
+
+    # ---- roster --------------------------------------------------------
+    # who is on the work, and what each seat is told. the crew is read, not invented, so
+    # the answer is a gap a person can close rather than a wish
+    @api.post("/crews/{team_id}/roster")
+    def crew_roster(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        agents = []
+        for agent in app.crews.list_agents(team_id):
+            granted = []
+            if app.context is not None:
+                try:
+                    granted = app.context.needs_for(agent["id"])
+                except CritterTownError:
+                    granted = []
+            agents.append({**agent, "context": granted})
+        return formation.form(data.get("signals") or {}, agents,
+                              int(data.get("parts", 1)))
+
+    @api.get("/roster/roles")
+    def roster_roles() -> dict:
+        return {"roles": {role: list(slices) for role, slices in formation.ROLE_SLICES.items()},
+                "shapes": {shape: list(seats) for shape, seats in formation.SHAPE_SEATS.items()}}
 
     # ---- convergence ---------------------------------------------------
     # a fan-out closes on a record: the partition map, the join rule and the reports.

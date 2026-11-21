@@ -173,6 +173,18 @@ a fan-out opens one automatically, one partition per child card, join `all`, and
 runner reports for a lane when its run ends. `approve` refuses a parent whose barrier is
 open.
 
+### the roster: who is on the work
+
+- `POST /crews/{id}/roster` takes the same `signals` as `/topology` plus `parts`, reads
+  the crew's real agents and each agent's enabled slices, and answers with seats: role,
+  agent, slices, withheld slices, and one sentence per seat saying why it exists
+- `GET /roster/roles` is the table itself: roles to slices, shapes to seats
+
+`decided` says the shape and its seats are consistent; `staffed` says every seat has an
+agent. `problems` are structural (a gated shape in a one-agent crew, a seat with no slices
+left) and `gaps` are staffing. the runner passes a seat role into `context.compose`, which
+intersects the role's entitlement with the agent's enabled slices.
+
 ### custody: who holds a card
 
 - `GET /tasks/{id}/custody` returns the holder, the lease expiry, the attempt count and

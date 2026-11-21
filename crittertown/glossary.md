@@ -160,6 +160,17 @@ interval or five-field cron, durable, feeding the same job queue the api uses. `
 is idempotent; the queue claim is a single serialized update so two workers never take
 the same job.
 
+### seat
+a role on a piece of work, with the slices that role is entitled to. `roster` decides the
+seats a task needs from the same signals the topology layer reads: a doer for a coupled
+task, a doer and a reviewer for one with a programmatic check, a researcher and a
+synthesizer for an open question, one doer per independent part plus an integrator for a
+fan-out, a doer and a sampler for a batch. the role caps the slices, so a reviewer is
+never handed the doer's lessons or the inbox: a reviewer holding the doer's reasoning is
+not reviewing, it is agreeing. a crew may narrow a seat's slices and never widen them, and
+what falls out is named. `decided` is about the shape, `staffed` is about the crew: a
+roster can be a correct answer with nobody in it yet.
+
 ### shift
 coverage, the way a shop floor does it: a rotation, a slot length and an arithmetic
 answer to "who is on the bar right now" (`slot_index = (now - anchor) // slot`, owner =
