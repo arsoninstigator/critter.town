@@ -57,6 +57,8 @@ class CrewRunner:
         # set by the composition root: a dispatched card is held under a lease, so a
         # holder that dies leaves an expiry instead of a card nobody can explain
         self.custody = None
+        # set by the composition root: a fan-out closes on a record, not on a hope
+        self.convergence = None
         self.knowledge = None
         # set by the composition root: the prompt is assembled from slices
         self.context = None
@@ -118,6 +120,12 @@ class CrewRunner:
                     parent_id=task["id"],
                 )
             )
+        if len(created) > 1 and self.convergence is not None:
+            # the lanes are cards, not seats: a card is what holds custody here, so it is
+            # what a barrier can name. join is all, because a parent that closes on one
+            # lane has cancelled the others by accident.
+            lanes = {child["id"]: child["id"] for child in created}
+            self.convergence.open(task_id, lanes, list(lanes), join="all")
         return created
 
     # ---- the run -------------------------------------------------------
@@ -241,6 +249,18 @@ class CrewRunner:
                     # the lease is gone, so the sweep is the one that can reclaim it
                     target = "blocked"
             self.kanban.move(task_id, target, agent["id"], note=error[:500])
+            if self.convergence is not None:
+                # a lane that failed is a blocked report, not a silence: the barrier has
+                # to be able to say this lane is out and why
+                lane = self.convergence.for_partition(task_id)
+                if lane:
+                    try:
+                        self.convergence.report(lane["id"], {
+                            "partition": task_id, "participant": task_id,
+                            "outcome": "blocked", "reason": error[:300],
+                        })
+                    except CritterTownError:
+                        pass
             self._retire_sidecars(task_id)
             if self.events_hook is not None:
                 self.events_hook("run.failed", {
@@ -276,6 +296,19 @@ class CrewRunner:
             actor=agent["id"], column="review" if reviewed else "done",
             evidence=f"run:{run_id}",
         )
+        if self.convergence is not None:
+            lane = self.convergence.for_partition(task_id)
+            if lane:
+                try:
+                    self.convergence.report(lane["id"], {
+                        "partition": task_id, "participant": task_id, "outcome": "result",
+                        "artifact_ref": f"run:{run_id}",
+                        "touches": [task.get("payload", {}).get("surface") or task_id],
+                    })
+                except CritterTownError:
+                    # a lane that cannot report is a barrier that will stall, and the
+                    # sweep will say so. failing the lane here would hide it
+                    pass
         return {
             "run_id": run_id,
             "task": task,

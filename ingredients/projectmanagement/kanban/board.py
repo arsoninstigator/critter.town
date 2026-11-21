@@ -19,6 +19,7 @@ from core.db import Store, dumps, loads, new_id, now
 CLAIM_WINDOW_SECONDS = 900.0
 LEASE_SECONDS = 300.0
 from core.errors import NotFound, ValidationError
+from work import convergence
 from work.evidence import KINDS, evidence_fits, expected
 
 def patch_for(column: str, ts: float) -> dict:
@@ -65,6 +66,9 @@ class KanbanService:
         # set by the composition root: `triggers.fire`. a null hook keeps tests and
         # one-off scripts from needing a rule engine to move a card.
         self.events_hook = None
+        # set by the composition root: a parent whose lanes are still out cannot be
+        # signed off, and the barrier is where that is recorded
+        self.convergence = None
 
     # ---- tasks ---------------------------------------------------------
     def create_task(
@@ -232,6 +236,23 @@ class KanbanService:
                     "or another agent",
                     task_id=task["id"], actor=actor)
 
+    def _check_barrier(self, task_id: str) -> None:
+        """a parent whose lanes are still out cannot be signed off.
+
+        the barrier is a record, so this reads it rather than guessing, and a missing
+        lane is named because "not done yet" is not a reason a person can act on.
+        """
+        if self.convergence is None:
+            return
+        plan = self.convergence.for_task(task_id)
+        if not plan:
+            return
+        state = convergence.barrier(plan)
+        if not state["resolved"]:
+            raise ValidationError(
+                "the barrier is not closed: " + (", ".join(state["missing"]) or "no result"),
+                missing=state["missing"], convergence=plan["id"])
+
     def approve(self, task_id: str, actor: str, note: str = "", evidence: str = "") -> dict:
         """walk a card to done the long way, so the gate is walked and not skipped.
 
@@ -242,6 +263,7 @@ class KanbanService:
         """
         task = self.get_task(task_id)
         reference = self._evidence_for(task, evidence)
+        self._check_barrier(task_id)
         if task["column"] == "in_progress":
             task = self.move(task_id, "review", actor, note=note)
         if task["column"] != "done":

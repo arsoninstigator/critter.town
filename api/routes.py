@@ -886,6 +886,36 @@ def create_api(app: App | None = None) -> FastAPI:
         task["runs"] = app.runner.list_runs(task_id)
         return task
 
+    # ---- convergence ---------------------------------------------------
+    # a fan-out closes on a record: the partition map, the join rule and the reports.
+    # the barrier is readable on purpose, because "who is missing" is the question a
+    # stalled parent is asked about.
+    @api.post("/tasks/{task_id}/convergence")
+    def open_convergence(task_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.convergence.open(
+            task_id,
+            data.get("partitions") or {},
+            list(data.get("participants") or []),
+            join=data.get("join", "all"),
+            quorum=data.get("quorum"),
+            deadline_seconds=float(data.get("deadline_seconds", 86400)),
+            parent=str(data.get("parent", "")),
+        )
+
+    @api.get("/tasks/{task_id}/convergence")
+    def task_convergence(task_id: str) -> dict:
+        plan = app.convergence.for_task(task_id, status="")
+        return plan or {}
+
+    @api.post("/convergences/{convergence_id}/report")
+    def report_convergence(convergence_id: str, payload: dict = Body(...)) -> dict:
+        return app.convergence.report(convergence_id, body(payload))
+
+    @api.get("/convergences/{convergence_id}")
+    def read_convergence(convergence_id: str) -> dict:
+        return app.convergence.check(convergence_id)
+
     # ---- topology ------------------------------------------------------
     # which shape the work needs, from the signals the caller declares. a decision
     # table, so the same signals answer the same way on a good day and a bad one.

@@ -656,6 +656,24 @@ create table if not exists lessons (
 );
 create index if not exists lessons_agent on lessons (agent_id, status);
 
+-- a fan-out closes on a record: an explicit partition map, a join rule, a deadline and
+-- the reports. "three of five lanes answered" and "all five answered" must not look alike.
+create table if not exists convergences (
+    id text primary key,
+    team_id text not null,
+    task_id text not null references tasks(id) on delete cascade,
+    parent text not null default '',
+    join_rule text not null default 'all',
+    quorum integer,
+    deadline double precision,
+    partitions text not null default '{}',
+    reports text not null default '[]',
+    status text not null default 'open',
+    created_date double precision not null,
+    updated_date double precision not null
+);
+create index if not exists convergences_task on convergences (task_id, status);
+
 -- an eval: a grid of scenarios and candidates, one deterministic scorer, one row per
 -- cell. the grid is stored with the run so a report can still be read after the code
 -- that produced it has moved on.

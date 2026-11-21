@@ -52,6 +52,7 @@ from work.workflows import WorkflowService
 from work.custody import Custody
 from work.liveness import Liveness
 from work.evals import EvalService
+from work.convergence import ConvergenceService
 
 
 @dataclass
@@ -94,6 +95,7 @@ class App:
     custody: Custody
     liveness: Liveness
     evals: EvalService
+    convergence: ConvergenceService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -222,6 +224,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # an eval reads the crew and the same model the runner uses, so a candidate is
     # measured against the prompt the crew would actually send
     evals = EvalService(store, crews=crews, model=runner.model)
+    # a fan-out closes on a record, so the runner reports into it as lanes finish
+    convergence = ConvergenceService(store, kanban=kanban)
+    runner.convergence = convergence
+    kanban.convergence = convergence
     # the runner asks the profile which relation an agent has, because a sidecar may not
     # be handed a card of its own
     runner.profile = profile
@@ -332,6 +338,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         custody=custody,
         liveness=liveness,
         evals=evals,
+        convergence=convergence,
         polls=polls,
         browsers=browsers,
         ops=ops,
