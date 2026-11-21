@@ -258,6 +258,16 @@ plan mode writes nothing to the board you did not ask for. `approve` is the one-
 step. it is deterministic on purpose: no model in the path, and the clauses it could not
 place are visible instead of smoothed over.
 
+### barrier
+the record that closes a fan-out. a convergence is a row: an explicit partition map, a
+join rule (`all`, `quorum`, `first_success`), a deadline and the reports. a lane reports
+`result` (with a reference), `not_applicable`, or `blocked` (with a reason), and silence
+is not one of the three, so three of five lanes answering never reads like five of five.
+a parent whose barrier is open cannot be signed off, and the refusal names the missing
+partition. the lanes are cards, not seats, because a card is what holds custody here.
+`POST /tasks/{id}/convergence` opens one, `POST /convergences/{id}/report` answers one,
+`GET /convergences/{id}` says whether it is closed, stalled, or still missing a lane.
+
 ### board
 the project management a crew shares, run on `manage`. projects hold issues, and an agent is
 a member with a role and an assignee slot, so assigning an issue to an agent is the same

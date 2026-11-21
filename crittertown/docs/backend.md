@@ -158,6 +158,21 @@ the signals live on a card under `payload.signals`, and `payload.structure` may 
 shape. dispatch compares the two and refuses a card that declares orchestration its own
 signals deny: that is the shape that costs seats, tokens and a convergence.
 
+### the barrier: whether a fan-out is finished
+
+- `POST /tasks/{id}/convergence` opens a barrier over a partition map, a join rule and a
+  deadline. the plan is validated first, so a partition with no owner is refused before
+  it is stored
+- `POST /convergences/{id}/report` records one lane: `result` with a reference,
+  `not_applicable`, or `blocked` with a reason. re-reporting replaces that lane
+- `GET /convergences/{id}` answers with the barrier, the missing lanes, any two lanes
+  that wrote the same surface, and whether it has stalled past its deadline
+- `GET /tasks/{id}/convergence` is the same question asked from the card
+
+a fan-out opens one automatically, one partition per child card, join `all`, and the
+runner reports for a lane when its run ends. `approve` refuses a parent whose barrier is
+open.
+
 ### custody: who holds a card
 
 - `GET /tasks/{id}/custody` returns the holder, the lease expiry, the attempt count and

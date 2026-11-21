@@ -259,3 +259,20 @@ convergence nobody can close. and a card may declare a cheaper shape than its si
 justify but never a more expensive one, which is why dispatch refuses a card that declares
 orchestration its own signals deny.
 
+## a fan-out closes on a record
+
+a parent that spawned children had no way to say what "the children are done" meant. the
+run that spawned them returned, the parent waited on nothing, and three of five lanes
+answering read exactly like five of five, because silence is not a result and nothing was
+counting the silences.
+
+so a convergence is a row: an explicit partition map, a join rule, a deadline and the
+reports. a lane answers `result` with a reference, `not_applicable`, or `blocked` with a
+reason, and the barrier is a pure function of those rows and the clock, so it says which
+lane is missing instead of saying "not yet". a parent whose barrier is open cannot be
+signed off, which is the part that makes the record load-bearing rather than decorative.
+
+the lanes are cards and not seats, deliberately: a card is what holds custody here, so a
+card is what a barrier can name and what a missing lane points at. `first_success` cancels
+the lanes that have not reported, because a lane that loses silently keeps spending.
+
