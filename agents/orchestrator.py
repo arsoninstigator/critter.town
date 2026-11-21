@@ -25,6 +25,7 @@ from comms.a2a import A2AService
 from core.config import Settings
 from agents.crews import CrewService
 from core.db import Store, dumps, loads, new_id, now
+from work import topology
 from core.errors import CritterTownError, NotAllowed, NotFound, ValidationError
 from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.runtime import AgentModel, build_model, render_prompt
@@ -145,6 +146,11 @@ class CrewRunner:
                 {"agent_id": agent["id"], "tools": agent.get("tools") or []},
                 task=task,
             )
+        # a card may declare the shape it wants, and the one refusal is a card that
+        # asks for orchestration its own signals do not justify: that shape costs seats,
+        # tokens and a convergence, and it is what a big-feeling task asks for
+        if topology is not None:
+            topology.check_declared(task.get("payload"), topology.signals_of(task))
         # custody before the column: a card in progress that nobody holds is the state
         # that used to need a person to notice it
         if self.custody is not None:

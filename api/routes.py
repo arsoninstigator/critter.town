@@ -37,6 +37,7 @@ from comms import protocol as a2a_spec
 from agents.agent_imports import AGENT_SOURCES, adopt, export_agent, import_agent
 from agents.context import SLICES
 from work.liveness import violations
+from work import topology
 from core.app import App, build_app
 from comms.events import Event
 from core.errors import CritterTownError, NotFound, ValidationError
@@ -884,6 +885,20 @@ def create_api(app: App | None = None) -> FastAPI:
         task["events"] = app.kanban.events(task_id)
         task["runs"] = app.runner.list_runs(task_id)
         return task
+
+    # ---- topology ------------------------------------------------------
+    # which shape the work needs, from the signals the caller declares. a decision
+    # table, so the same signals answer the same way on a good day and a bad one.
+    @api.post("/topology")
+    def choose_topology(payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return topology.choose(data.get("signals") or {})
+
+    @api.get("/topology/shapes")
+    def topology_shapes() -> dict:
+        return {"shapes": list(topology.SHAPES),
+                "implemented_by": topology.IMPLEMENTED_BY,
+                "signals": {name: list(values) for name, values in topology.SIGNALS.items()}}
 
     # ---- evals ---------------------------------------------------------
     @api.post("/crews/{team_id}/evals")

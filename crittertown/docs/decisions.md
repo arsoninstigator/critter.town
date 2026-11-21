@@ -240,3 +240,22 @@ expectation has not produced one. the summary names a winner by mean, and a tie 
 the candidate declared first, since the order a person wrote is a preference and an
 alphabetical tiebreak invents one.
 
+## the shape of the work is a decision table, not a preference
+
+a crew that reaches for orchestration because orchestration sounds serious builds the
+expensive thing for the cheap task. the four production shapes named in the mindstudio
+piece and the autogen paper it links agree on the rule: start with the simplest topology,
+because it extends with the least code.
+
+so the shape is chosen from declared facts and nothing else. an open question is research,
+many similar items are a factory, independent parts with a second seat are orchestration,
+coupled work with a programmatic check is a harness, and everything else is solo. the
+answer carries the one fact that decided it, so a disagreement is about a signal rather
+than about taste.
+
+two refusals keep it honest. a missing signal refuses instead of defaulting, because
+guessing that work is coupled costs a crew its lanes and guessing the other way costs a
+convergence nobody can close. and a card may declare a cheaper shape than its signals
+justify but never a more expensive one, which is why dispatch refuses a card that declares
+orchestration its own signals deny.
+

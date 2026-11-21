@@ -147,6 +147,17 @@ eval measures the decision and not the execution. the scorer is `{kind, expect}`
 kinds `exact`, `contains` and `regex`, stored with the run so a report can still say how
 it was judged after the code has moved on.
 
+### topology: which shape the work needs
+
+- `POST /topology` takes `{signals}` and answers with a shape, the one fact that decided
+  it, what implements it here, and whether it needs a gate. nothing is stored
+- `GET /topology/shapes` lists the five shapes, the primitives behind each, and the
+  signal vocabulary
+
+the signals live on a card under `payload.signals`, and `payload.structure` may declare a
+shape. dispatch compares the two and refuses a card that declares orchestration its own
+signals deny: that is the shape that costs seats, tokens and a convergence.
+
 ### custody: who holds a card
 
 - `GET /tasks/{id}/custody` returns the holder, the lease expiry, the attempt count and
