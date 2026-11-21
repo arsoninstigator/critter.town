@@ -288,3 +288,19 @@ projects, claims, strikes, crossings:
 `POST /tasks/{id}/breakdown` takes `parts` (title, slice, surface, budget_cents,
 assignee_agent_id), an optional `join`, and an optional `project_id`. the join defaults to
 the card's shape; a looser join is refused.
+
+seats, dispatch and objectives:
+
+- `GET /agents/{id}/seat`, `POST /agents/{id}/freeze` (reason, ttl_days), `POST /agents/{id}/thaw`
+- `POST /agents/{id}/burn` (reason), `POST /agents/{id}/duplicate` (name, role, skills)
+- `POST /crews/{id}/seats/sweep` freezes seats quiet past the crew's `idle_freeze_days` and
+  retires the ones frozen past their window
+- `POST /crews/{id}/dispatch/next` decides the next card, claims it for 15 minutes, and
+  answers `nothing_ready`, `kind_unregistered`, `no_seat_for_slice` or `all_seats_leased`
+  when the honest answer is nothing
+- `POST /crews/{id}/objectives`, `GET /crews/{id}/objectives`,
+  `POST /objectives/{id}/measure`, `POST /crews/{id}/replenish`
+
+a seat is a column set on `agents` (`seat_state`, `frozen_until`, `burned_reason`, `orphaned`,
+`lineage`, `depth`, `parent_id`), not a table of its own, because the seat is the agent seen as
+a job. objectives and measurements are their own tables. the schema is 18.
