@@ -51,6 +51,7 @@ from work.routines import RoutineService
 from work.workflows import WorkflowService
 from work.custody import Custody
 from work.liveness import Liveness
+from work.evals import EvalService
 
 
 @dataclass
@@ -92,6 +93,7 @@ class App:
     sagas: SagaService
     custody: Custody
     liveness: Liveness
+    evals: EvalService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -217,6 +219,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     custody = Custody(store)
     liveness = Liveness(store, kanban)
     runner.custody = custody
+    # an eval reads the crew and the same model the runner uses, so a candidate is
+    # measured against the prompt the crew would actually send
+    evals = EvalService(store, crews=crews, model=runner.model)
     # the runner asks the profile which relation an agent has, because a sidecar may not
     # be handed a card of its own
     runner.profile = profile
@@ -326,6 +331,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         sagas=sagas,
         custody=custody,
         liveness=liveness,
+        evals=evals,
         polls=polls,
         browsers=browsers,
         ops=ops,

@@ -885,6 +885,33 @@ def create_api(app: App | None = None) -> FastAPI:
         task["runs"] = app.runner.list_runs(task_id)
         return task
 
+    # ---- evals ---------------------------------------------------------
+    @api.post("/crews/{team_id}/evals")
+    def create_eval(team_id: str, payload: dict = Body(...)) -> dict:
+        """a grid is created before it is run, so a person can read the scenarios and
+        the scorer before anything is spent."""
+        data = body(payload)
+        return app.evals.create(
+            team_id,
+            data.get("scenarios") or [],
+            data.get("candidates") or [],
+            data.get("scorer") or {},
+            name=str(data.get("name", "")),
+        )
+
+    @api.get("/crews/{team_id}/evals")
+    def list_evals(team_id: str, limit: int = 50) -> dict:
+        return {"evals": app.evals.list(team_id, limit=limit)}
+
+    @api.get("/evals/{eval_id}")
+    def get_eval(eval_id: str) -> dict:
+        run = app.evals.get(eval_id)
+        return {**run, "cases": app.evals.cases(eval_id)}
+
+    @api.post("/evals/{eval_id}/run")
+    def run_eval(eval_id: str) -> dict:
+        return app.evals.run(eval_id)
+
     # ---- custody -------------------------------------------------------
     # who holds a card, what it has cost, and the sweep that finds the ones nobody
     # is watching. the preview is read-only, so a person can see the report before

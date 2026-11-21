@@ -132,6 +132,21 @@ curl -X POST localhost:8000/agents/$AGENT/vault -H 'content-type: application/js
 - the card's `kind` (set at creation, one of ten) decides which schemes count, and the
   refusal names the schemes it wanted. a crew's `orchestration.evidence` may narrow them
 
+### evals: does the crew still answer well
+
+- `POST /crews/{id}/evals` takes `{name, scenarios, candidates, scorer}` and stores the
+  grid as a draft. every id must be present and unique, every scenario needs an input,
+  and the scorer is checked here, so a bad grid is refused before anything is spent
+- `POST /evals/{id}/run` walks scenarios by candidates in declaration order, records one
+  row per cell with the output, the score and the reason, and summarises the mean per
+  candidate. a tie goes to the candidate declared first
+- `GET /evals/{id}` and `GET /crews/{id}/evals` read the report back, cells included
+
+a cell is one model turn with the candidate's `system_prompt`, never a sandbox, so an
+eval measures the decision and not the execution. the scorer is `{kind, expect}` with
+kinds `exact`, `contains` and `regex`, stored with the run so a report can still say how
+it was judged after the code has moved on.
+
 ### custody: who holds a card
 
 - `GET /tasks/{id}/custody` returns the holder, the lease expiry, the attempt count and

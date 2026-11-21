@@ -223,3 +223,20 @@ a suggestion. the runner writes `run:<id>` when it finishes, so a dispatched car
 reference before anyone signs it, and a routine writes its receipt. when the shell closes a
 card it asks for the reference rather than inventing one.
 
+## a prompt change needs a number, not a feeling
+
+the crew could tell you that a run failed. it could not tell you whether the crew had
+got better, because a better answer and a different answer look the same in a log.
+
+so an eval is a grid: scenarios down one side, candidates across the other, one
+deterministic scorer for the whole matrix, one row per cell. the grid and the scorer are
+validated before the first cell runs, and the row keeps the scorer, so a report still
+says how it was judged after the code that judged it has moved on.
+
+two boundaries are deliberate. a cell is one model turn, never a sandbox, because a
+matrix that runs commands is a weapon with a report attached. and a scorer that cannot
+decide is an error rather than a zero: a zero is a result, and a scorer with no
+expectation has not produced one. the summary names a winner by mean, and a tie goes to
+the candidate declared first, since the order a person wrote is a preference and an
+alphabetical tiebreak invents one.
+
