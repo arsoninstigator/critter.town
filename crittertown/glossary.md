@@ -219,6 +219,18 @@ invariants a row breaks. it repairs two things and reports the rest, because a c
 repaired itself would hide the bug that broke it. `GET /crews/{id}/custody` shows what it
 would do; `POST /crews/{id}/sweep` does it.
 
+### topology
+which shape the work needs, decided from signals the card declares: is the question known
+or open, one item or many, are the parts coupled or independent, does a program or a
+person decide it is right, is it reversible, and how many seats may work at once. five
+answers, each a thing the repo already has: `research` for an open question, `factory`
+for many similar items, `orchestration` for independent parts with a second seat,
+`harness` for coupled work with a programmatic check, `solo` for everything else. a
+missing signal refuses rather than guessing, and a card may declare a cheaper shape than
+its signals suggest but never a more expensive one. `POST /topology` answers without
+storing anything, and dispatch refuses a card that declares orchestration its own signals
+deny.
+
 ### the town
 the ecosystem is the town. `critter.town` is the repository, `crittertown` is the
 distribution, the cli and the env prefix (`CRITTERTOWN_*`), `crittertown.db` is the file.
