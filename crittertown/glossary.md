@@ -354,6 +354,14 @@ is who owns the thing, not how big it is.
   has is `configured()`, a `status()` that says what is missing, one method per call that
   returns a plain dict, and a `ProviderFailure` on anything that is not 2xx. `firecrawl` is
   the worked example.
+- **a seat** is an agent seen as a job: live, frozen or burned. it is not the agent's runtime
+  status. the verbs are duplicate, freeze, thaw and burn, and "stop" is not one of them
+  because it conflates paused, done and dead. a freeze carries a window, and a seat frozen
+  past it is retired rather than resumed.
+- **dispatch** is how a crew decides what to work on next: the card names a capability, any
+  live seat holding it may take it, and the answer "nothing" comes with a reason.
+- **replenishment** is an objective asking for work because it is behind its clock, not
+  because it is below its target. one card per objective, then it refuses.
 - **workbench** is where an agent composes its own steps out of toolbox entries. not built.
 - **infrastructure** is how the platform itself is deployed. not built.
 

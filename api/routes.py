@@ -925,6 +925,62 @@ def create_api(app: App | None = None) -> FastAPI:
         return {"roles": {role: list(slices) for role, slices in formation.ROLE_SLICES.items()},
                 "shapes": {shape: list(seats) for shape, seats in formation.SHAPE_SEATS.items()}}
 
+    # ---- seats, dispatch, replenishment --------------------------------
+    # the org chart's moving parts: four seat verbs and no stop, a dispatcher that answers
+    # "nothing" honestly, and an objective that can ask for work.
+    @api.get("/agents/{agent_id}/seat")
+    def read_seat(agent_id: str) -> dict:
+        return app.seats.get(agent_id)
+
+    @api.post("/agents/{agent_id}/freeze")
+    def freeze_seat(agent_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload)
+        return app.seats.freeze(agent_id, str(data.get("reason", "")),
+                                ttl_days=data.get("ttl_days"))
+
+    @api.post("/agents/{agent_id}/thaw")
+    def thaw_seat(agent_id: str) -> dict:
+        return app.seats.thaw(agent_id)
+
+    @api.post("/agents/{agent_id}/burn")
+    def burn_seat(agent_id: str, payload: dict = Body(...)) -> dict:
+        return app.seats.burn(agent_id, str(body(payload).get("reason", "")))
+
+    @api.post("/agents/{agent_id}/duplicate")
+    def duplicate_seat(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.seats.duplicate(agent_id, str(data.get("name", "")),
+                                   role=str(data.get("role", "")),
+                                   skills=data.get("skills"))
+
+    @api.post("/crews/{team_id}/seats/sweep")
+    def sweep_seats(team_id: str) -> dict:
+        return app.seats.sweep_idle(team_id)
+
+    @api.post("/crews/{team_id}/dispatch/next")
+    def dispatch_next(team_id: str, payload: dict = Body(default={})) -> dict:
+        return app.dispatch.next(team_id, claim=bool(body(payload).get("claim", True)))
+
+    @api.post("/crews/{team_id}/objectives")
+    def create_objective(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.replenish.create(
+            team_id, str(data.get("name", "")), float(data.get("baseline") or 0),
+            float(data.get("target") or 0), float(data.get("deadline") or 0),
+            list(data.get("kinds") or []), observed_since=data.get("observed_since"))
+
+    @api.get("/crews/{team_id}/objectives")
+    def list_objectives(team_id: str) -> dict:
+        return {"objectives": app.replenish.list(team_id)}
+
+    @api.post("/objectives/{objective_id}/measure")
+    def measure_objective(objective_id: str, payload: dict = Body(...)) -> dict:
+        return app.replenish.measure(objective_id, float(body(payload).get("value") or 0))
+
+    @api.post("/crews/{team_id}/replenish")
+    def replenish_work(team_id: str) -> dict:
+        return app.replenish.replenish(team_id)
+
     # ---- projects, claims, strikes, crossings --------------------------
     # the units above a card: a project with gates, a claim with a kind, a strike with a
     # count, and a crossing with a direction and a rate.

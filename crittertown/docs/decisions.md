@@ -325,3 +325,46 @@ not handed a part, a part assigned outside the crew needs a declared crossing, a
 is the shape's unless the caller asked for a stricter one. the split also writes a plan claim
 per part, which is how a duplicate surface becomes contested at breakdown time rather than a
 conflict at report time.
+
+## four verbs and no stop, a dispatcher, and an objective that asks
+
+the last three organs of the org chart, ported from the reference's `domain/agents.ts` and
+`jobs/{dispatch,replenish}.ts`, and the three places the runtime now reads the units built
+before them.
+
+a seat is live, frozen or burned. "stop" is not a verb because it conflates paused, done and
+dead. freezing is cheap and reversible, carries a window, releases every lease the seat held
+and closes its open handoffs as undelivered, because a frozen seat holding a lease is an
+outage nobody has been told about. thawing past the window refuses with
+`frozen_window_expired` and says to spawn against the current ledger: state older than a
+fortnight is archaeology, since the tools moved and the lease is somebody else's. burning
+needs a reason of at least three characters, is terminal, and orphans the children, which
+finish what they hold and never multiply again. duplication narrows skills and stops at depth
+three, because a child that could do more than its parent is an escalation, and escalation is
+a person's act, never a spawn parameter.
+
+idleness is answered rather than moralised about: a seat quiet past the crew's declared
+`idle_freeze_days` is frozen (off by default, since a quiet crew is not a broken one), and a
+seat left frozen past its window is retired by the same sweep with the window in the reason.
+firing after idle time is the end of that arc, not its beginning.
+
+dispatch decides what gets worked on next and refuses with a reason: `nothing_ready`,
+`kind_unregistered` (a card whose kind has no evidence rule could never be marked done, so
+handing it out manufactures work that cannot finish), `no_seat_for_slice`, `all_seats_leased`.
+work is addressed by capability, not by name: the card names its slice and any live seat
+holding it may take it, which is why a dead seat stops the holder rather than the work. the
+claim is 15 minutes and happens at the moment of the decision, so two ticks cannot hand out
+the same card.
+
+an objective is a metric with a baseline, a target and a deadline, measured from outside, and
+behind means behind the clock rather than behind the target: `done < elapsed * 0.85`, with
+`observed_since` fixed at the first measurement because measuring from the latest collapses
+the period and makes every objective look ahead of itself. one card per objective, a wip limit
+of two regardless of seats, and six refusals that are the safety property: a machine that can
+invent work will invent infinite work unless something stops it.
+
+the three wirings: a guardrail refusal records a strike against the seat that earned it, so a
+limit is counted rather than described; a handoff that leaves the crew needs a declared
+crossing of kind `request` and a live receiver; and the morning brief carries each open
+project's unmet gate checks, so a stalled phase is a line in the brief rather than something a
+person has to notice on a board.

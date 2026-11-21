@@ -54,6 +54,8 @@ class GuardrailService:
         self.audit = audit
         # set by the composition root: the ledger the spend limit is measured against
         self.budget = None
+        # and the count behind a freeze, so a refusal costs the seat something
+        self.strikes = None
 
     # ---- rows ----------------------------------------------------------
     def _row(self, row) -> dict:
@@ -282,6 +284,14 @@ class GuardrailService:
                             "reason": verdict["reason"], "action": action}),
                      "guardrail", now()),
                 )
+        # a refusal is a strike: two of them freeze the seat, which is the difference
+        # between a limit that is counted and a limit that is described
+        if self.strikes is not None and task and task.get("assignee_agent_id"):
+            try:
+                self.strikes.record(team_id, task["assignee_agent_id"], "guardrail_refused",
+                                    tool=action, note=str(verdict["reason"])[:200])
+            except Exception:
+                pass  # a strike that cannot be written must not hide the refusal itself
         self._audit("guardrail.refused", team_id,
                     (task or {}).get("assignee_agent_id", "") or "",
                     {"guardrail_id": verdict["guardrail_id"], "action": action,

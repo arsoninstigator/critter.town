@@ -57,6 +57,10 @@ class BriefService:
         self.window_start_hour = int(window_start_hour)
         self.window_end_hour = int(window_end_hour)
         self.retention_days = int(retention_days)
+        # the nightly reads two things it did not: whether a project's gate has opened, and
+        # whether a seat has gone quiet long enough to freeze
+        self.projects = None
+        self.seats = None
 
     # ---- window --------------------------------------------------------
     def window(self, date: str | None = None) -> tuple[float, float, str]:
@@ -270,6 +274,17 @@ class BriefService:
             "agent_id": agent_id or None,
             "created_date": now(),
         }
+        # a project gate is a fact about tonight, so the brief carries it rather than
+        # leaving a stalled phase to be noticed by a person reading a board
+        if self.projects is not None:
+            try:
+                brief["projects"] = [
+                    {"id": project["id"], "name": project["name"], "phase": project["phase"],
+                     "unmet": [check["id"] for check in self.projects.evaluate(project["id"])["unmet"]]}
+                    for project in self.projects.list(team_id)
+                    if project["phase"] not in ("closed", "killed")]
+            except Exception:
+                brief["projects"] = []
         if include_a2a:
             brief["a2a_pending"] = [dict(r) for r in self.store.query(
                 "select id, from_agent_id, body from a2a_messages "

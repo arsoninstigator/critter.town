@@ -55,6 +55,9 @@ from work.evals import EvalService
 from work.convergence import ConvergenceService
 from work.delegation import DelegationService
 from work.budget import BudgetService
+from work.dispatch import DispatchService
+from work.replenish import ReplenishService
+from work.seats import SeatService
 from work.projects import ProjectService
 from work.claims import ClaimService
 from work.strikes import StrikeService
@@ -108,6 +111,9 @@ class App:
     claims: ClaimService
     strikes: StrikeService
     crossings: CrossingService
+    seats: SeatService
+    dispatch: DispatchService
+    replenish: ReplenishService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -258,6 +264,11 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     runner.strikes = strikes
     # a breakdown reads the project's slices, the parts' budget, a frozen seat and a door
     # out of the crew, so the same services answer it as answer dispatch
+    seats = SeatService(store, crews=crews, kanban=kanban, audit=audit, strikes=strikes)
+    dispatch = DispatchService(store, kanban=kanban, custody=custody, seats=seats, crews=crews)
+    replenish = ReplenishService(store, kanban=kanban, crews=crews)
+    guardrails.strikes = strikes
+    delegation.seats = seats
     delegation.projects = projects
     delegation.claims = claims
     delegation.strikes = strikes
@@ -289,6 +300,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
                          channels=channels,
                          window_start_hour=settings.brief_window_start_hour,
                          window_end_hour=settings.brief_window_end_hour)
+    # the nightly reads the project gates and the seats that have gone quiet
+    brief.projects = projects
+    brief.seats = seats
 
     connectors = ConnectorService(store, crews=crews, profile=profile, audit=audit,
                                  events_hook=emit)
@@ -379,6 +393,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         claims=claims,
         strikes=strikes,
         crossings=crossings,
+        seats=seats,
+        dispatch=dispatch,
+        replenish=replenish,
         polls=polls,
         browsers=browsers,
         ops=ops,

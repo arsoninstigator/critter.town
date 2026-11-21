@@ -22,7 +22,7 @@ import re
 from typing import Any
 
 from core.db import Store, dumps, loads, new_id, now
-from core.errors import NotFound, ValidationError
+from core.errors import NotAllowed, NotFound, ValidationError
 from work import topology
 from work.permeability import resolve
 
@@ -205,6 +205,25 @@ class DelegationService:
         if self.crews is not None:
             for agent_id in (from_agent_id, to_agent_id):
                 self.crews.get_agent(agent_id)  # raises when the agent is unknown
+        # a handoff that leaves the crew is a crossing, and a wall nothing crosses is not
+        # a wall: it needs a declared door of kind request, or a named refusal
+        if self.crossings is not None and self.crews is not None:
+            sender = self.crews.get_agent(from_agent_id)
+            receiver = self.crews.get_agent(to_agent_id)
+            if str(sender["team_id"]) != str(receiver["team_id"]):
+                found = resolve(self.crossings.list(sender["team_id"]),
+                                str(sender["team_id"]), str(receiver["team_id"]),
+                                "request", now())
+                if not found["ok"]:
+                    raise NotAllowed(f"crossing_not_declared:{found['reason']}",
+                                     from_scope=sender["team_id"],
+                                     to_scope=receiver["team_id"])
+        # a frozen seat is not offered work
+        if self.seats is not None:
+            for agent_id in (to_agent_id,):
+                allowed = self.seats.check(agent_id)
+                if not allowed["allowed"]:
+                    raise NotAllowed(f"seat_is_{allowed['reason']}", agent_id=agent_id)
         handoff_id = new_id("hand")
         ts = now()
         with self.store.tx() as c:

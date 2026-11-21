@@ -771,6 +771,35 @@ create table if not exists crossings (
 );
 create index if not exists crossings_pair on crossings (team_id, from_scope, to_scope);
 
+-- an objective is a metric with a baseline, a target and a deadline. replenishment reads it
+-- against the clock, so being behind is a comparison rather than a mood.
+create table if not exists objectives (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    name text not null,
+    baseline double precision not null,
+    target double precision not null,
+    deadline double precision not null,
+    observed_since double precision,
+    kinds text not null default '[]',
+    wip_limit integer not null default 2,
+    status text not null default 'active',
+    created_date double precision not null,
+    updated_date double precision not null
+);
+create index if not exists objectives_team on objectives (team_id, status);
+
+-- a measurement is an observation from outside. the first one starts the period, because
+-- measuring from the latest makes every objective look ahead of itself.
+create table if not exists measurements (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    objective_id text not null references objectives(id) on delete cascade,
+    value double precision not null,
+    computed_at double precision not null
+);
+create index if not exists measurements_objective on measurements (objective_id, computed_at);
+
 -- budget as a reservation: the check and the claim are the same act, so two parallel
 -- cards cannot both read the same under-budget number and both proceed.
 create table if not exists budget_reservations (

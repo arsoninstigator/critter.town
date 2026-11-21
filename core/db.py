@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 SCHEMA = """
 create table if not exists meta (
@@ -791,6 +791,35 @@ create table if not exists crossings (
 );
 create index if not exists crossings_pair on crossings (team_id, from_scope, to_scope);
 
+-- an objective is a metric with a baseline, a target and a deadline. replenishment reads it
+-- against the clock, so being behind is a comparison rather than a mood.
+create table if not exists objectives (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    name text not null,
+    baseline real not null,
+    target real not null,
+    deadline real not null,
+    observed_since real,
+    kinds text not null default '[]',
+    wip_limit integer not null default 2,
+    status text not null default 'active',
+    created_date real not null,
+    updated_date real not null
+);
+create index if not exists objectives_team on objectives (team_id, status);
+
+-- a measurement is an observation from outside. the first one starts the period, because
+-- measuring from the latest makes every objective look ahead of itself.
+create table if not exists measurements (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    objective_id text not null references objectives(id) on delete cascade,
+    value real not null,
+    computed_at real not null
+);
+create index if not exists measurements_objective on measurements (objective_id, computed_at);
+
 -- budget as a reservation: the check and the claim are the same act, so two parallel
 -- cards cannot both read the same under-budget number and both proceed.
 create table if not exists budget_reservations (
@@ -929,6 +958,9 @@ def now() -> float:
 
 
 LATER_COLUMNS: dict[str, dict[str, str]] = {
+    "teams": {
+        "idle_freeze_days": "integer not null default 0",
+    },
     "tasks": {
         "channel_id": "text references channels(id) on delete set null",
         # v12: a card in someone's hands is a lease with an expiry, not a status. an
@@ -963,6 +995,15 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
         # general). a kind caps the seat roles it may fill and the slices it may read,
         # so "the research agent" is a rule rather than a name someone remembers.
         "kind": "text not null default 'general'",
+        # the seat is not the agent's runtime status: a seat is live, frozen or burned, and a
+        # frozen seat carries the window after which resuming it would be a lie.
+        "seat_state": "text not null default 'live'",
+        "frozen_until": "real",
+        "burned_reason": "text not null default ''",
+        "orphaned": "integer not null default 0",
+        "lineage": "text not null default ''",
+        "depth": "integer not null default 0",
+        "parent_id": "text",
     },
     # a spawn is a principal with a parent, and a lane in a fan-out
     "agent_spawns": {
