@@ -247,6 +247,15 @@ what sort of worker an agent is: `harness` (code), `autoscientist` (research), `
 (batch) or `orchestrator`, plus `general` for an agent nobody has characterised. a kind caps
 which seats the agent may fill and which slices it may read, and never widens either.
 
+### breakdown
+a split of one card into owned parts. the parts are cards, because a card is what holds
+custody. a part is refused rather than created in five cases: nobody owns it, it names a
+slice its project does not have, its seat is frozen, it leaves the crew without a declared
+crossing, or the parts together ask for more than the parent was given. the join comes from
+the shape, and a caller may tighten it and never loosen it. the split is written as a plan
+claim per part, so two parts on one surface oppose each other at breakdown time instead of
+colliding at report time.
+
 ### project
 the unit above a card. a card is hours; a project is the thing that has to survive being
 run for a month by nobody. it moves through `inception`, `build`, `assemble`, `launch`,

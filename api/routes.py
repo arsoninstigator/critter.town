@@ -1035,8 +1035,9 @@ def create_api(app: App | None = None) -> FastAPI:
     def break_down_task(task_id: str, payload: dict = Body(...)) -> dict:
         data = body(payload)
         return app.delegation.breakdown(task_id, data.get("parts") or [],
-                                        join=data.get("join", "all"),
-                                        quorum=data.get("quorum"))
+                                        join=str(data.get("join") or ""),
+                                        quorum=data.get("quorum"),
+                                        project_id=str(data.get("project_id") or ""))
 
     @api.post("/crews/{team_id}/budget/reserve")
     def reserve_budget(team_id: str, payload: dict = Body(...)) -> dict:

@@ -284,3 +284,7 @@ projects, claims, strikes, crossings:
 - `POST /crews/{id}/claims`, `GET /crews/{id}/claims/{thread}`
 - `GET /agents/{id}/standing`, `POST /crews/{id}/strikes`, `POST /crews/{id}/strikes/{agent}/clear`
 - `POST /crews/{id}/crossings`, `GET /crews/{id}/crossings`, `POST /crews/{id}/crossings/authorize`, `POST /crossings/{id}/revoke`
+
+`POST /tasks/{id}/breakdown` takes `parts` (title, slice, surface, budget_cents,
+assignee_agent_id), an optional `join`, and an optional `project_id`. the join defaults to
+the card's shape; a looser join is refused.

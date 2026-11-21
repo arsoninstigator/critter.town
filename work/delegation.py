@@ -23,6 +23,8 @@ from typing import Any
 
 from core.db import Store, dumps, loads, new_id, now
 from core.errors import NotFound, ValidationError
+from work import topology
+from work.permeability import resolve
 
 STATES = ("offered", "accepted", "rejected", "expired", "undelivered")
 CLOSED = ("accepted", "rejected", "expired", "undelivered")
@@ -129,13 +131,62 @@ def validate_envelope(envelope: dict) -> list[str]:
     return problems
 
 
+
+# what a shape asks of a fan-out. a breakdown may be stricter than its shape and never
+# looser: "all" is the strictest join, so asking for first_success where the shape says
+# every part matters is how a split quietly becomes a race.
+SHAPE_JOIN = {"solo": "all", "harness": "all", "factory": "all", "research": "quorum",
+              "orchestration": "all"}
+JOIN_STRICTNESS = {"all": 3, "quorum": 2, "first_success": 1}
+
+
+def join_for(declared: str, shape: str) -> str:
+    """the join a breakdown gets: the shape's, unless the caller asked for a stricter one."""
+    wanted = SHAPE_JOIN.get(shape or "", "all")
+    if not declared:
+        return wanted
+    if declared not in JOIN_STRICTNESS:
+        raise ValidationError("unknown_join", join=declared)
+    if JOIN_STRICTNESS[declared] < JOIN_STRICTNESS[wanted]:
+        raise ValidationError(
+            "a_breakdown_may_be_stricter_than_its_shape_not_looser",
+            declared=declared, shape=shape or "unknown", shape_join=wanted)
+    return declared
+
+
+def split_budget(parent_budget: int, parts: list[dict]) -> dict:
+    """what each part may spend. a part that declares nothing takes an even share of what
+    the parent has left, and the sum is never more than the parent was given."""
+    if parent_budget <= 0:
+        return {"shares": [int(part.get("budget_cents") or 0) for part in parts], "remaining": 0}
+    declared = [int(part.get("budget_cents") or 0) for part in parts]
+    spent = sum(declared)
+    if spent > parent_budget:
+        raise ValidationError("parts_ask_for_more_than_the_parent_was_given",
+                              asked=spent, parent=parent_budget)
+    silent = [i for i, value in enumerate(declared) if value == 0]
+    shares = list(declared)
+    if silent:
+        share = (parent_budget - spent) // len(silent)
+        for i in silent:
+            shares[i] = share
+    return {"shares": shares, "remaining": parent_budget - sum(shares)}
+
 class DelegationService:
-    def __init__(self, store: Store, crews=None, kanban=None, audit=None, convergence=None):
+    def __init__(self, store: Store, crews=None, kanban=None, audit=None, convergence=None,
+                 projects=None, claims=None, strikes=None, crossings=None):
         self.store = store
         self.crews = crews
         self.kanban = kanban
         self.audit = audit
         self.convergence = convergence
+        # a breakdown reads four things beyond the board: which slices the project has,
+        # what the parts may spend, whether the seat is frozen, and whether a part leaves
+        # the crew at all.
+        self.projects = projects
+        self.claims = claims
+        self.strikes = strikes
+        self.crossings = crossings
 
     # ---- the offer -----------------------------------------------------
     def offer(self, team_id: str, from_agent_id: str, to_agent_id: str, payload_ref: str,
@@ -230,13 +281,12 @@ class DelegationService:
         return {"expired": [offer["id"] for offer in overdue], "checked": len(offers)}
 
     # ---- the breakdown -------------------------------------------------
-    def breakdown(self, task_id: str, parts: list[dict], join: str = "all",
-                  quorum: int | None = None) -> dict:
-        """split a parent into owned parts, and refuse to pretend an unowned part is fine.
-
-        the parts are cards, because a card is what holds custody here. a part with no
-        owner is reported rather than created, since a card nobody is assigned to is a
-        card that waits for a person to notice it.
+    def breakdown(self, task_id: str, parts: list[dict], join: str = "",
+                  quorum: int | None = None, project_id: str = "") -> dict:
+        """split a parent into owned parts, and refuse to pretend a part is fine when it is
+        not. a part can be wrong in five ways, and each one is named rather than created:
+        no owner, a slice the project does not have, a seat that is frozen, a part that
+        leaves the crew without a door, and a budget that outruns the parent.
         """
         if self.kanban is None:
             raise ValidationError("a breakdown needs the board")
@@ -244,27 +294,125 @@ class DelegationService:
         wanted = [part for part in parts if isinstance(part, dict) and part.get("title")]
         if len(wanted) < 2:
             raise ValidationError("a_breakdown_needs_two_parts", parts=len(wanted))
+        payload = parent.get("payload") or {}
+        problems: list[str] = []
+
+        # the shape decides the join. a caller may tighten it and may not loosen it.
+        shape = str(payload.get("structure") or "")
+        if not shape and payload.get("signals"):
+            shape = str(topology.choose(payload["signals"]).get("structure") or "")
+        join = join_for(join, shape)
+
+        # which project is this card part of, and which slices may a part name
+        bound = project_id or str(payload.get("project_id") or "")
+        project = self.projects.get(bound) if (bound and self.projects is not None) else None
+        allowed_slices = {str(s.get("slice")) for s in (project or {}).get("slices") or []}
+
+        # what the parts may spend between them
+        parent_budget = int(payload.get("budget_cents") or 0)
+        try:
+            budget = split_budget(parent_budget, wanted)
+        except ValidationError:
+            raise
+        shares = budget["shares"]
+
         assignments = {str(part["title"]): str(part.get("assignee_agent_id") or "")
                        for part in wanted}
-        orphans = orphan_partitions([str(part["title"]) for part in wanted], assignments)
-        created: list[dict] = []
+        orphans = set(orphan_partitions([str(part["title"]) for part in wanted], assignments))
+        problems.extend(f"orphan_partition:{name}" for name in orphans)
+
+        # a frozen seat is not offered work, and a part outside the crew needs a declared
+        # door before it is a part rather than a leak
+        blocked: set[str] = set()
         for part in wanted:
-            if str(part["title"]) in orphans:
+            title = str(part["title"])
+            if title in orphans:
                 continue
+            agent_id = assignments[title]
+            if self.strikes is not None:
+                standing = self.strikes.check(agent_id)
+                if not standing["allowed"]:
+                    blocked.add(title)
+                    problems.append(f"seat_frozen:{title}")
+                    continue
+            if self.crews is not None and self.crossings is not None:
+                agent = self.crews.get_agent(agent_id)
+                if str(agent.get("team_id")) != str(parent["team_id"]):
+                    found = resolve(self.crossings.list(parent["team_id"]),
+                                    str(parent["team_id"]), str(agent.get("team_id")),
+                                    "request", now())
+                    if not found["ok"]:
+                        blocked.add(title)
+                        problems.append(f"crossing_not_declared:{title}:{found['reason']}")
+
+        # a slice the project does not have is the same kind of alarm as an unowned part:
+        # it means the split invented work nobody scoped
+        if project is not None:
+            for part in wanted:
+                title = str(part["title"])
+                if title in orphans or title in blocked:
+                    continue
+                named = str(part.get("slice") or "")
+                if named not in allowed_slices:
+                    blocked.add(title)
+                    problems.append(f"slice_not_in_project:{title}:{named or 'none'}")
+
+        created: list[dict] = []
+        for index, part in enumerate(wanted):
+            title = str(part["title"])
+            if title in orphans or title in blocked:
+                continue
+            part_payload = {"surface": str(part.get("surface") or title)}
+            if project is not None:
+                part_payload["project_id"] = project["id"]
+                part_payload["slice"] = str(part.get("slice"))
+            if shares[index]:
+                part_payload["budget_cents"] = shares[index]
             created.append(self.kanban.create_task(
-                team_id=parent["team_id"], title=str(part["title"])[:200],
+                team_id=parent["team_id"], title=title[:200],
                 description=str(part.get("description", "")), column="ready",
                 priority=int(part.get("priority", parent["priority"])),
-                assignee_agent_id=str(part["assignee_agent_id"]), parent_id=task_id,
-                payload={"surface": str(part.get("surface") or part["title"])},
+                assignee_agent_id=assignments[title], parent_id=task_id,
+                payload=part_payload,
             ))
+
         barrier = None
         if len(created) > 1 and self.convergence is not None:
             lanes = {child["id"]: child["id"] for child in created}
             barrier = self.convergence.open(task_id, lanes, list(lanes), join=join,
                                             quorum=quorum)
-        return {"created": created, "orphans": orphans, "barrier": barrier,
-                "problems": [f"orphan_partition:{name}" for name in orphans]}
+
+        # the split is an assertion, so it is written as one: a plan claim per part, and
+        # two parts on one surface oppose each other here rather than colliding later
+        claim_ids: list[str] = []
+        if self.claims is not None and created:
+            by_surface: dict[str, list[str]] = {}
+            drafts = []
+            for child in created:
+                surface = str((child.get("payload") or {}).get("surface", child["title"]))
+                cid = new_id("claim")
+                by_surface.setdefault(surface, []).append(cid)
+                drafts.append({"id": cid, "kind": "plan",
+                               "statement": f"{surface} is covered by {child['title']}",
+                               "confidence": 0.6, "basis": f"task:{task_id}",
+                               "by": str(child.get("assignee_agent_id") or "")})
+            for ids in by_surface.values():
+                if len(ids) > 1:
+                    for cid in ids:
+                        next(d for d in drafts if d["id"] == cid)["opposes"] = [
+                            other for other in ids if other != cid]
+            try:
+                posted = self.claims.post(parent["team_id"], task_id,
+                                          f"breakdown of {parent['title']}", drafts,
+                                          by=str(parent.get("assignee_agent_id") or "owner"))
+                claim_ids = posted["claims"]
+            except ValidationError as exc:
+                # a split whose claims will not hold is a split that cannot explain itself
+                problems.append(f"claims_refused:{exc.code}")
+
+        return {"created": created, "orphans": sorted(orphans), "barrier": barrier,
+                "join": join, "budget": {"parent": parent_budget, "remaining": budget["remaining"]},
+                "claims": claim_ids, "problems": problems}
 
     # ---- rows ----------------------------------------------------------
     def _shape(self, row: dict) -> dict:
