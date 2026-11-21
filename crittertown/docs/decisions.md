@@ -315,3 +315,13 @@ two adaptations: a project's slices are matched to cards by title or payload, be
 unit of work is a card rather than a tier's contract; and a strike is recorded against an
 agent, because our seat is an agent. a project in `review` with no verdict is a gate that has
 not opened, not a third exit.
+
+## a split is scoped, funded, staffed and doored
+
+the four units above a card each had a hole in the breakdown, so the breakdown now reads
+them: slices come from the project and a part outside the set is not created, budgets split
+down from the parent with silent parts taking an even share of what is left, a frozen seat is
+not handed a part, a part assigned outside the crew needs a declared crossing, and the join
+is the shape's unless the caller asked for a stricter one. the split also writes a plan claim
+per part, which is how a duplicate surface becomes contested at breakdown time rather than a
+conflict at report time.

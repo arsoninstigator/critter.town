@@ -256,6 +256,12 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     strikes = StrikeService(store, crews=crews)
     crossings = CrossingService(store, crews=crews)
     runner.strikes = strikes
+    # a breakdown reads the project's slices, the parts' budget, a frozen seat and a door
+    # out of the crew, so the same services answer it as answer dispatch
+    delegation.projects = projects
+    delegation.claims = claims
+    delegation.strikes = strikes
+    delegation.crossings = crossings
     # the runner asks the profile which relation an agent has, because a sidecar may not
     # be handed a card of its own
     runner.profile = profile
