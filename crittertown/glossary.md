@@ -230,6 +230,23 @@ invariants a row breaks. it repairs two things and reports the rest, because a c
 repaired itself would hide the bug that broke it. `GET /crews/{id}/custody` shows what it
 would do; `POST /crews/{id}/sweep` does it.
 
+### handoff
+a delegation as a state machine: `offered` then `accepted`, `rejected`, `expired` or
+`undelivered`. state crosses the boundary and a summary does not, so an offer carries a
+reference and a precondition instead of a paragraph. only the addressee may answer, an
+unheld precondition is refused rather than accepted, and expiry is an event, which is what
+turns a silent drop into a row.
+
+### reservation
+a claim on budget, held before the work and settled after it. the check and the claim are
+one act, so two parallel cards cannot both read the same under-budget number and both
+proceed. an estimate that was wrong is settled at the real figure and marked `over_spend`.
+
+### kind
+what sort of worker an agent is: `harness` (code), `autoscientist` (research), `factory`
+(batch) or `orchestrator`, plus `general` for an agent nobody has characterised. a kind caps
+which seats the agent may fill and which slices it may read, and never widens either.
+
 ### topology
 which shape the work needs, decided from signals the card declares: is the question known
 or open, one item or many, are the parts coupled or independent, does a program or a

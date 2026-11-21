@@ -21,6 +21,7 @@ from __future__ import annotations
 from agents.context import SLICES
 from core.errors import ValidationError
 from work import topology
+from agents import archetypes
 
 # role -> the slices that role is entitled to. absence is a decision: a reviewer is not
 # entitled to `lessons` (the doer's own teaching) or `inbox` (other people's requests).
@@ -100,6 +101,13 @@ def form(signals: dict, agents: list[dict] | None = None, parts: int = 1) -> dic
         match = _pick(crew, role, taken=[seat["agent_id"] for seat in seats])
         granted = match.get("context") if match else None
         slices = slices_for(role, granted if isinstance(granted, list) else None)
+        if match is not None:
+            # the agent's kind is a second ceiling under the role's entitlement, so a
+            # research agent in a doer seat still cannot be handed the board
+            kind = match.get("kind") or "general"
+            capped = archetypes.slices_for(kind, role, slices["granted"])
+            slices = {"granted": capped,
+                      "withheld": [name for name in slices["granted"] if name not in capped]}
         if not slices["granted"]:
             problems.append(f"seat_cannot_be_told_anything:{role}")
         seats.append({
@@ -109,6 +117,7 @@ def form(signals: dict, agents: list[dict] | None = None, parts: int = 1) -> dic
             "agent": (match or {}).get("name", ""),
             "slices": slices["granted"],
             "withheld": slices["withheld"],
+            "kind": (match or {}).get("kind", ""),
             "why": _why(role, shape, bool(match)),
         })
         if match is None:
@@ -132,6 +141,9 @@ def _pick(agents: list[dict], role: str, taken: list[str]) -> dict | None:
     labelling should beat a keyword, and a keyword should beat an accident.
     """
     free = [a for a in agents if a.get("id") not in taken]
+    # a kind that cannot fill this seat is not a candidate, whatever its skills say
+    allowed = [a for a in free if archetypes.may_fill(a.get("kind") or "general", role)[0]]
+    free = allowed
     for agent in free:
         if str(agent.get("role", "")).lower() == role:
             return agent

@@ -52,6 +52,8 @@ class GuardrailService:
         self.kanban = kanban
         self.crews = crews
         self.audit = audit
+        # set by the composition root: the ledger the spend limit is measured against
+        self.budget = None
 
     # ---- rows ----------------------------------------------------------
     def _row(self, row) -> dict:
@@ -214,10 +216,12 @@ class GuardrailService:
                 return f"egress_hosts: {host} is not in this crew's allowlist"
 
         elif kind == "spend_per_day":
-            # crittertown does not meter money itself. a deployment that has a spend
-            # figure passes it in, and this is the door it knocks on. when no figure is
-            # passed the limit is not pretended to be enforced.
+            # the figure comes from the budget ledger when one is wired: settled plus held,
+            # because money that is committed is not money that is available. a caller may
+            # still pass a number, which is what a deployment without a ledger does.
             spend = context.get("spend_today")
+            if spend is None and self.budget is not None:
+                spend = self.budget.committed_today(rail["team_id"])
             if spend is not None and float(spend) >= float(value):
                 return f"spend_per_day: {spend} today, the limit is {value}"
 

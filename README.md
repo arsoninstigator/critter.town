@@ -4,6 +4,12 @@
 
 > agent crews that take shifts, hold cards, and sign their own work
 
+![three agents in a trench coat holding a business license](crittertown/assets/we-are-a-business.png)
+
+*one agent is a demo. three agents in a trench coat with a business licence is a platform.
+the drawing is the joke the whole design is built against: an "agent company" that is one
+model wearing a coat, and a business licence nobody checked.*
+
 ## the name
 
 the whole thing is a town: `critter.town`, `crittertown` in the code. the teams inside it
@@ -118,7 +124,7 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (922 tests, no network, no sleeps), and it is honest about what is
+it runs, it is tested (965 tests, no network, no sleeps), and it is honest about what is
 not done: the npm and mcp entry points in `get/`, the adapter that mints a code from
 proton pass or bitwarden when a gate is approved, and the second half of the canvas (the
 workflow editor). `crittertown/docs/directive.md` covers what autonomy rests on: intent,
