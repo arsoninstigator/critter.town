@@ -301,3 +301,17 @@ so a silent drop becomes a row. an envelope names its authority and a hop limit,
 delivery stops retrying before its ttl instead of spending budget to hand over something
 the receiver must reject on arrival. authority is an intersection with a trace: the level
 that dropped a tool is named, and a secondment spends nothing unless its scope says so.
+
+## the four units above a card
+
+the reference code keeps a project (phases, gates over rows, kill criteria declared at
+inception), discourse (claims with kinds, a synthesis that accounts for every claim), strikes
+(a count per refusal, two freezes a seat, burn has no inverse) and permeability (declared
+crossings with direction, kinds, rate, expiry, drain or cut). they were the last pieces
+missing above the card, and they are ported with the same rule as the rest: the decision is a
+pure function, the service reads the rows, and nothing grades itself.
+
+two adaptations: a project's slices are matched to cards by title or payload, because our
+unit of work is a card rather than a tier's contract; and a strike is recorded against an
+agent, because our seat is an agent. a project in `review` with no verdict is a gate that has
+not opened, not a third exit.

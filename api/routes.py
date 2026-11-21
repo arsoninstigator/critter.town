@@ -925,6 +925,90 @@ def create_api(app: App | None = None) -> FastAPI:
         return {"roles": {role: list(slices) for role, slices in formation.ROLE_SLICES.items()},
                 "shapes": {shape: list(seats) for shape, seats in formation.SHAPE_SEATS.items()}}
 
+    # ---- projects, claims, strikes, crossings --------------------------
+    # the units above a card: a project with gates, a claim with a kind, a strike with a
+    # count, and a crossing with a direction and a rate.
+    @api.post("/crews/{team_id}/projects")
+    def create_project(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.projects.create(
+            team_id, str(data.get("name", "")), list(data.get("slices") or []),
+            int(data.get("unit_cost_ceiling_cents") or 0), list(data.get("kill_criteria") or []),
+            objective_ref=str(data.get("objective_ref", "")),
+            unit_price_cents=data.get("unit_price_cents"),
+            min_margin_pct=data.get("min_margin_pct"))
+
+    @api.get("/crews/{team_id}/projects")
+    def list_projects(team_id: str, phase: str = "") -> dict:
+        return {"projects": app.projects.list(team_id, phase)}
+
+    @api.get("/projects/{project_id}")
+    def read_project(project_id: str) -> dict:
+        return app.projects.get(project_id)
+
+    @api.get("/projects/{project_id}/gate")
+    def project_gate(project_id: str) -> dict:
+        return app.projects.evaluate(project_id)
+
+    @api.post("/projects/{project_id}/advance")
+    def advance_project(project_id: str, payload: dict = Body(default={})) -> dict:
+        return app.projects.advance(project_id, body(payload).get("facts") or {})
+
+    @api.post("/projects/{project_id}/kill")
+    def kill_project(project_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.projects.kill(project_id, str(data.get("criterion", "")),
+                                 str(data.get("reason", "")))
+
+    @api.post("/crews/{team_id}/claims")
+    def post_claims(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.claims.post(team_id, str(data.get("thread", "")), str(data.get("intent", "")),
+                               list(data.get("claims") or []), by=str(data.get("by", "")),
+                               questions=list(data.get("questions") or []))
+
+    @api.get("/crews/{team_id}/claims/{thread}")
+    def read_claims(team_id: str, thread: str) -> dict:
+        return {"claims": app.claims.thread(team_id, thread),
+                "synthesis": app.claims.synthesize(team_id, thread)}
+
+    @api.get("/agents/{agent_id}/standing")
+    def agent_standing(agent_id: str) -> dict:
+        return app.strikes.check(agent_id)
+
+    @api.post("/crews/{team_id}/strikes")
+    def record_strike(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.strikes.record(team_id, str(data.get("agent_id", "")),
+                                  str(data.get("code", "")), tool=str(data.get("tool", "")),
+                                  note=str(data.get("note", "")))
+
+    @api.post("/crews/{team_id}/strikes/{agent_id}/clear")
+    def clear_strikes(team_id: str, agent_id: str, payload: dict = Body(...)) -> dict:
+        return app.strikes.clear(team_id, agent_id, str(body(payload).get("by", "")))
+
+    @api.post("/crews/{team_id}/crossings")
+    def declare_crossings(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.crossings.declare(team_id, list(data.get("crossings") or []))
+
+    @api.get("/crews/{team_id}/crossings")
+    def list_crossings(team_id: str) -> dict:
+        return {"crossings": app.crossings.list(team_id)}
+
+    @api.post("/crews/{team_id}/crossings/authorize")
+    def authorize_crossing(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.crossings.authorize(team_id, str(data.get("from_scope", "")),
+                                       str(data.get("to_scope", "")), str(data.get("kind", "")),
+                                       size_bytes=int(data.get("size_bytes") or 0))
+
+    @api.post("/crossings/{crossing_id}/revoke")
+    def revoke_crossing(crossing_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload)
+        return app.crossings.revoke(crossing_id, str(data.get("mode", "drain")),
+                                    str(data.get("by", "")))
+
     # ---- delegation, budget, agent kinds -------------------------------
     @api.post("/crews/{team_id}/delegations")
     def offer_handoff(team_id: str, payload: dict = Body(...)) -> dict:

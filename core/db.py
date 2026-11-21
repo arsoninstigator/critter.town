@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 SCHEMA = """
 create table if not exists meta (
@@ -716,6 +716,80 @@ create table if not exists delegations (
 );
 create index if not exists delegations_team on delegations (team_id, state, created_date);
 create index if not exists delegations_to on delegations (to_agent_id, state);
+
+-- a project is the unit above a card: a phase, a gate over rows, and kill criteria
+-- declared before the sunk cost exists.
+create table if not exists projects (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    name text not null,
+    phase text not null default 'inception',
+    started_at real not null,
+    phase_started_at real not null,
+    objective_ref text not null default '',
+    slices text not null default '[]',
+    unit_cost_ceiling_cents integer not null default 0,
+    unit_price_cents integer,
+    min_margin_pct real,
+    kill_criteria text not null default '[]',
+    closed_reason text not null default '',
+    created_date real not null,
+    updated_date real not null
+);
+create index if not exists projects_team on projects (team_id, phase);
+
+-- a claim is the unit of discourse: a fact needs evidence, a plan may not be stated as
+-- a fact, and a synthesis has to account for every claim it was given.
+create table if not exists claims (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    thread text not null,
+    message_id text not null default '',
+    kind text not null default 'inference',
+    statement text not null,
+    evidence text not null default '',
+    confidence real not null default 0.5,
+    basis text not null default '',
+    by_agent text not null default '',
+    opposes text not null default '[]',
+    created_date real not null
+);
+create index if not exists claims_thread on claims (team_id, thread, created_date);
+
+-- a limit nothing counts is a wish: one row per refusal, so "why is this seat frozen"
+-- is a query.
+create table if not exists strikes (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    agent_id text not null references agents(id) on delete cascade,
+    code text not null default '',
+    tool text not null default '',
+    note text not null default '',
+    cleared_by text not null default '',
+    created_date real not null
+);
+create index if not exists strikes_agent on strikes (agent_id, cleared_by);
+
+-- a wall is only a wall if the crossing is declared: direction, kinds, rate, expiry.
+create table if not exists crossings (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    from_scope text not null,
+    to_scope text not null,
+    kinds text not null default '[]',
+    max_per_hour integer not null default 0,
+    max_bytes integer,
+    expires_at real not null,
+    authorized_by text not null default '',
+    reason text not null default '',
+    revoke_mode text not null default 'drain',
+    enabled integer not null default 1,
+    tokens real not null default 0,
+    last_refill_at real not null,
+    created_date real not null,
+    updated_date real not null
+);
+create index if not exists crossings_pair on crossings (team_id, from_scope, to_scope);
 
 -- budget as a reservation: the check and the claim are the same act, so two parallel
 -- cards cannot both read the same under-budget number and both proceed.

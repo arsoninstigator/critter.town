@@ -247,6 +247,30 @@ what sort of worker an agent is: `harness` (code), `autoscientist` (research), `
 (batch) or `orchestrator`, plus `general` for an agent nobody has characterised. a kind caps
 which seats the agent may fill and which slices it may read, and never widens either.
 
+### project
+the unit above a card. a card is hours; a project is the thing that has to survive being
+run for a month by nobody. it moves through `inception`, `build`, `assemble`, `launch`,
+`operate`, `review`, `closed`, `killed`, and a phase moves only when its gate reads
+`ok` from rows. review has two exits and no third: a metric that moved closes it, and
+anything else kills it. kill criteria are declared at inception, so stopping is a decision
+made before the sunk cost exists.
+
+### claim
+the unit of discourse. a claim is a `fact`, `inference`, `preference` or `plan`; a fact
+needs a reference and a plan may not be stated as near-certain. a synthesis puts every
+claim in exactly one bucket (kept, challenged, dropped with a sourced rebuttal, unresolved
+with a reason), because a claim in no bucket was dropped by accident, which is how a
+synthesis becomes a smoothing.
+
+### strike
+one row per refusal against a seat. two strikes freeze the seat, a person clears them by
+looking, and burn has no inverse. the point is that "why is this seat frozen" is a query.
+
+### crossing
+a declared door between two crews: direction, envelope kinds, a rate, a size, an expiry.
+the default is deny, the narrower door wins when two match, the rate is a token bucket that
+refills continuously, and revoking is `drain` (what is in flight lands) or `cut`.
+
 ### topology
 which shape the work needs, decided from signals the card declares: is the question known
 or open, one item or many, are the parts coupled or independent, does a program or a
