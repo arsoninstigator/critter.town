@@ -55,6 +55,10 @@ from work.evals import EvalService
 from work.convergence import ConvergenceService
 from work.delegation import DelegationService
 from work.budget import BudgetService
+from work.projects import ProjectService
+from work.claims import ClaimService
+from work.strikes import StrikeService
+from work.permeability import CrossingService
 
 
 @dataclass
@@ -100,6 +104,10 @@ class App:
     convergence: ConvergenceService
     delegation: DelegationService
     budget: BudgetService
+    projects: ProjectService
+    claims: ClaimService
+    strikes: StrikeService
+    crossings: CrossingService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -241,6 +249,13 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     budget = BudgetService(store, guardrails=guardrails)
     guardrails.budget = budget
     runner.budget = budget
+    # the unit above a card, the unit of discourse, the count behind a freeze, and the
+    # declared doors between crews
+    projects = ProjectService(store, crews=crews, kanban=kanban)
+    claims = ClaimService(store, crews=crews)
+    strikes = StrikeService(store, crews=crews)
+    crossings = CrossingService(store, crews=crews)
+    runner.strikes = strikes
     # the runner asks the profile which relation an agent has, because a sidecar may not
     # be handed a card of its own
     runner.profile = profile
@@ -354,6 +369,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         convergence=convergence,
         delegation=delegation,
         budget=budget,
+        projects=projects,
+        claims=claims,
+        strikes=strikes,
+        crossings=crossings,
         polls=polls,
         browsers=browsers,
         ops=ops,

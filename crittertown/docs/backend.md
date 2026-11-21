@@ -276,3 +276,11 @@ same shape with one manual step.
   `GET /agent-kinds` for the four kinds of worker.
 - `GET /health` is liveness with counts; `GET /health/ready` is readiness and answers 503
   when the store does not.
+
+projects, claims, strikes, crossings:
+
+- `POST /crews/{id}/projects`, `GET /crews/{id}/projects`, `GET /projects/{id}`
+- `GET /projects/{id}/gate`, `POST /projects/{id}/advance`, `POST /projects/{id}/kill`
+- `POST /crews/{id}/claims`, `GET /crews/{id}/claims/{thread}`
+- `GET /agents/{id}/standing`, `POST /crews/{id}/strikes`, `POST /crews/{id}/strikes/{agent}/clear`
+- `POST /crews/{id}/crossings`, `GET /crews/{id}/crossings`, `POST /crews/{id}/crossings/authorize`, `POST /crossings/{id}/revoke`
