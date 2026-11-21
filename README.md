@@ -2,13 +2,50 @@
 
 ![crittertown](crittertown/assets/logo.png)
 
-> agent crews that take shifts, hold cards, and sign their own work
+> a dark factory for ai agents: an org chart of long running workers, and a person at the
+> top who is not managing it
 
 ![three agents in a trench coat holding a business license](crittertown/assets/we-are-a-business.png)
 
-*one agent is a demo. three agents in a trench coat with a business licence is a platform.
-the drawing is the joke the whole design is built against: an "agent company" that is one
-model wearing a coat, and a business licence nobody checked.*
+## what this is building
+
+crittertown is an intentionally assembled architecture for a multi-agent system that runs as
+a dark factory: autonomous, self directed, self driving, long running ai workers carrying out
+end to end operations with almost nobody in the loop.
+
+the structure is a distributed hierarchical multi-agent system, an hmas, shaped like an org
+chart, because an org chart is the oldest known answer to "how do a hundred workers finish
+something without one person holding all of it". departments and wings hold teams, teams hold
+agents, and the agents are a mixture of generalists and specialists. the hierarchy is not
+decoration: it is how authority is intersected downward, how work is routed by capability
+rather than by name, and how an escalation finds a person to ask.
+
+the agents are the only first-class citizens. a person is not a node in the org chart. each
+agent has its own cloud computer, its own tool capabilities and its own cryptographic
+identity, so a claim it makes about work it did can be checked by someone who was not there.
+
+the aim, stated plainly, is not a coworker and not a companion. crittertown is not built for
+sitting beside a human in a shared document. it is built to take a problem end to end inside
+the agent org chart and come back with the result. the human is the ubo, the ultimate
+beneficial owner: hands off, holding the direction, the constraints and the money, and not
+the day to day manager of anything.
+
+what that asks for, and what is being built here:
+
+- **long horizon.** work outlives a context window, a session and a model. a card is a row,
+  a run holds a lease, and the board remembers both
+- **self improving.** a run that goes badly files a lesson, a person promotes it, and the
+  promoted sentence goes into every later prompt. a lesson structurally cannot touch a limit
+- **self regulating.** limits answer without a person, and a refusal is counted against the
+  seat that earned it rather than described in a log
+- **self remediating.** a dead holder, a silent run and a seat that renews forever are found
+  by the sweep, not by a person noticing
+- **proactive and reliable.** the next thing happens because a schedule or an event said so,
+  and the morning brief carries the numbers that say whether it did
+- **auditable.** every move is a row, the rows are hash chained and signed per agent, and the
+  chain exports as a bundle anyone can verify offline
+- **lifecycle.** agents are added, frozen, thawed, duplicated, burned and retired, and none
+  of that is a status field someone edits by hand
 
 ## the name
 
@@ -46,12 +83,22 @@ crew
  ├── board ── append only event log
  ├── rooms ── conversation + their own board
  ├── org chart ── coordinators, escalation, routing
+ ├── seats ── roles, slices, freeze/thaw/duplicate/burn, dispatch by capability
+ ├── projects ── phases with gates, two exit review, kill criteria
+ ├── delegations ── handoffs as a state machine, breakdown into owned parts
+ ├── convergence ── a barrier per fan out, so a parent waits on lanes not on hope
+ ├── claims ── facts need references, plans may not be near certain
+ ├── strikes ── two refusals freeze a seat, and a person clears it
+ ├── crossings ── declared doors between crews, deny by default
+ ├── budget ── a reservation, so a check and a claim are one act
  ├── shifts ── rotation, on duty, handoffs
  ├── intent ── direction, constraints, definition of done (read into every run)
  ├── routines ── recurring work with a receipt per day
  ├── guardrails ── the limits that answer without a person
  ├── lessons ── what a run taught, proposed and promoted by a person
  ├── knowledge ── preferences, facts, decisions, processes, patterns, failure modes
+ ├── topology ── which structure a piece of work needs, decided from declared signals
+ ├── evals ── a grid of scenarios by candidates, one scorer, one named winner
  ├── workflows ── dag, agent authored, human approved
  └── schedules ── durable queue, overnight brief
 ```
@@ -60,8 +107,13 @@ crew
 
 - **a card is a row, not a message.** every move is validated and appended, so the board
   is an audit log with a current state projection bolted on
-- **agents talk through a gate.** in a reviewed crew an a2a message is `pending` until a
-  human approves it. an unreviewed claim cannot change another agent's behaviour
+- **a lease expires.** a holder that dies leaves an expiry instead of a card nobody can
+  explain, and the sweep reclaims it without a reaper that remembers anything
+- **renewing is not working.** output is recorded as its own fact, so a run that holds its
+  lease while writing nothing for fifteen minutes gets a recovery card filed against it
+- **a split is scoped, funded, staffed and doored.** a breakdown refuses an unowned part, a
+  slice the project lacks, a frozen seat, a part leaving the crew without a declared
+  crossing, and parts asking for more than the parent was given
 - **who is working is arithmetic, not a stored fact.** `(now - anchor) // slot` picks the
   owner, so a duplicated beat cannot skew coverage and a missed beat cannot skip someone
 - **approvals are links, not logins.** a gate opens with single use signed tokens and one
@@ -124,11 +176,16 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (991 tests, no network, no sleeps), and it is honest about what is
-not done: the npm and mcp entry points in `get/`, the adapter that mints a code from
-proton pass or bitwarden when a gate is approved, and the second half of the canvas (the
-workflow editor). `crittertown/docs/directive.md` covers what autonomy rests on: intent,
-routines, gates, guardrails, lessons and the knowledge base.
+it runs, it is tested (1073 tests, no network, no sleeps), and it is honest about what is
+not done. the runtime does not use every unit above yet: an agent to agent message carries no
+claims and crosses no declared door, so a claim is only checked where a synthesis is written.
+the shell shows ten views over 242 routes, so projects, strikes, claims, crossings and evals
+have an api and no page. the postgres translation is tested for drift
+rather than against a live server, and `tx()` will need a real advisory lock there. auth is
+one shared token with no user model. and in `get/`, npm and mcp are honest placeholders.
+
+`crittertown/docs/directive.md` covers what autonomy rests on: intent, routines, gates,
+guardrails, lessons and the knowledge base.
 
 ## licence
 
