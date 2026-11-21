@@ -656,6 +656,35 @@ create table if not exists lessons (
 );
 create index if not exists lessons_agent on lessons (agent_id, status);
 
+-- an eval: a grid of scenarios and candidates, one deterministic scorer, one row per
+-- cell. the grid is stored with the run so a report can still be read after the code
+-- that produced it has moved on.
+create table if not exists eval_runs (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    name text not null default '',
+    scenarios text not null default '[]',
+    candidates text not null default '[]',
+    scorer text not null default '{}',
+    status text not null default 'draft',
+    summary text not null default '{}',
+    created_date double precision not null,
+    updated_date double precision not null
+);
+create index if not exists eval_runs_team on eval_runs (team_id, created_date);
+
+create table if not exists eval_cases (
+    id text primary key,
+    eval_id text not null references eval_runs(id) on delete cascade,
+    scenario_id text not null,
+    candidate_id text not null,
+    output text not null default '',
+    score double precision not null default 0,
+    detail text not null default '',
+    created_date double precision not null
+);
+create index if not exists eval_cases_eval on eval_cases (eval_id, candidate_id);
+
 -- the curated knowledge base: what would take time to explain again, and what a
 -- capable agent would not already know from context.
 create table if not exists knowledge_entries (

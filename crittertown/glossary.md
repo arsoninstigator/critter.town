@@ -99,6 +99,15 @@ narrow that list and may not widen it, because widening is how a gate quietly st
 anything. `gate:` closes any kind, since a recorded decision is a row with who, when and
 why in it.
 
+### eval
+a grid of scenarios and candidates with one deterministic scorer, run as a matrix and
+recorded one row per cell, so a prompt change has a number instead of a feeling. a cell
+is one model turn with the candidate's prompt: no sandbox, no shell, because a matrix
+that runs commands is a weapon with a report attached. the grid and the scorer are
+checked before the first cell runs, and a scorer that cannot decide is an error rather
+than a row of zeros. `POST /crews/{id}/evals` writes the grid as a draft, `POST
+/evals/{id}/run` fills it.
+
 ### gate
 an approval that needs a link, not a login. a `human_gate` node, or a run that failed,
 opens a gate with signed single-use tokens; the paper trail is the row, the question
