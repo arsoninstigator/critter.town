@@ -276,3 +276,20 @@ the lanes are cards and not seats, deliberately: a card is what holds custody he
 card is what a barrier can name and what a missing lane points at. `first_success` cancels
 the lanes that have not reported, because a lane that loses silently keeps spending.
 
+## a seat is a role with a slice list
+
+two questions were being answered by accident. who a task gets was answered by dispatch's
+score, which says who is free and close enough, not who the task needs. what each of them
+reads was answered by whatever slices an agent had enabled, so a reviewer could be handed
+the doer's lessons and a lane could be handed the whole board.
+
+formation is a decision table over the same signals the topology layer reads, and it
+answers in seats: a role, the slices that role is entitled to, and a sentence saying why
+the seat exists. the role caps the slices at compose time, so the entitlement is enforced
+where the prompt is built rather than where the roster is drawn. a crew may narrow and
+never widen, and the narrowing is reported as withheld rather than dropped, because a seat
+missing a slice it needs is a seat doing the job blind.
+
+the split that keeps it honest: decided is about the shape, staffed is about the crew. a
+roster with no agents is a correct answer to the wrong question, and it says so.
+

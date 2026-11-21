@@ -160,12 +160,23 @@ class ContextSlicer:
         return wanted
 
     def compose(self, agent_id: str, task_id: str = "", run_id: str = "",
-                needs: list[str] | None = None, store: bool = True) -> dict:
+                needs: list[str] | None = None, store: bool = True,
+                role: str = "") -> dict:
         if self.crews is None:
             raise ValueError("composing context needs the crew service")
         agent = self.crews.get_agent(agent_id)
         task = self.kanban.get_task(task_id) if (task_id and self.kanban) else None
-        chosen = [name for name in ORDER if name in (needs or self.needs_for(agent_id))]
+        wanted = needs or self.needs_for(agent_id)
+        if role:
+            # a seat's role caps what it may be told, whatever the profile enabled: a
+            # reviewer holding the doer's lessons is not reviewing, it is agreeing
+            from work.roster import ROLE_SLICES
+
+            entitled = ROLE_SLICES.get(role)
+            if entitled is None:
+                raise ValueError(f"unknown seat role '{role}'")
+            wanted = [name for name in wanted if name in entitled]
+        chosen = [name for name in ORDER if name in wanted]
         slices: list[dict] = []
         blocks: list[str] = []
         for name in chosen:
