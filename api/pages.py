@@ -113,6 +113,7 @@ var R = {
   materialise: "crews/{team}/routines/materialise",
   guardrails: "crews/{team}/guardrails",
   guardrail: "guardrails/{rail}",
+  railRefusals: "crews/{team}/rail-refusals",
   // canvas b: the workflow editor. save, run and resume are the operator's own
   // actions in their own editor, which is why they are writes this page may make.
   workflows: "crews/{team}/workflows",
@@ -708,6 +709,23 @@ async function renderGuardrails(view, params) {
     panel.appendChild(el("div", { class: "muted", text: "no limits. an agent with no limits is a gate nobody is standing at." }));
   }
   view.appendChild(panel);
+  // the output rail is the one that runs after the model speaks, so its refusals are not
+  // in refused_today: they are their own rows, and a page that never showed them made the
+  // only rail that can catch a leaked key invisible from here.
+  var late = await api(R.railRefusals, { team: params.team }).catch(function () { return { refusals: [] }; });
+  var rows = (late && late.refusals) || [];
+  var outPanel = el("div", { class: "panel" }, [el("h2", { text: "refused on the way out" })]);
+  outPanel.appendChild(el("div", { class: "meta", text: rows.length
+    ? rows.length + " answer(s) stopped after the model spoke"
+    : "nothing has been stopped on the way out" }));
+  rows.slice(0, 12).forEach(function (row) {
+    outPanel.appendChild(el("div", { class: "card" }, [
+      el("div", { text: row.kind + " · " + row.action }),
+      el("div", { class: "meta", text: row.reason }),
+      el("div", { class: "muted", text: (row.agent_id || "unattributed") + " · " + (row.task_id || "no card") + " · " + (row.chars || 0) + " chars" })
+    ]));
+  });
+  view.appendChild(outPanel);
   view.appendChild(el("div", { class: "muted",
     text: "a limit answers without a person. it refuses before a card moves, and the refusal is counted apart from a failure." }));
 }
