@@ -13,6 +13,13 @@ crittertown is an intentionally assembled architecture for a multi-agent system 
 a dark factory: autonomous, self directed, self driving, long running ai workers carrying out
 end to end operations with almost nobody in the loop.
 
+the phrase is borrowed from lights-out manufacturing, the factory with the lights off because
+nobody is standing in it, and it carries the failure mode that comes with the borrowing: code
+shipping that no person read, verified only by the tests the same agents wrote. so the answer
+here is not more autonomy, it is evidence. a card closes on a reference somebody else can
+check, a gate opens on rows rather than on an opinion, and the parts of the system that decide
+without a person are the parts that were written to be decided without one.
+
 the structure is a distributed hierarchical multi-agent system, an hmas, shaped like an org
 chart, because an org chart is the oldest known answer to "how do a hundred workers finish
 something without one person holding all of it". departments and wings hold teams, teams hold
