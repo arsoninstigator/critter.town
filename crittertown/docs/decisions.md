@@ -520,3 +520,35 @@ bundled scripts run on the agent's own computer, under the same rails as any oth
 one more thing is refused by name: a skill with `disable-model-invocation: true` and
 `user-invocable: false` is unreachable by both routes, so it is a file rather than a skill and
 the loader says so.
+
+## the rail that runs after the model speaks
+
+**decided.** guardrails stay data, and the one rail that cannot be pre-dispatch is a row like
+the rest.
+
+the guardrail module has said since it was written that `check` is the only entry point, because
+a limit enforced in one path and forgotten in another is not a limit. that argument survives
+here: the output rail is `check_output` and `enforce_output` beside `check` and `enforce`, over
+the same table, with the same `agent_id` scoping, the same strike on refusal and the same audit
+event. what is new is the action, `output`, and the four kinds that only make sense on it.
+
+why it had to exist. dispatch, sandbox, egress and card-move all answer before the work, which
+means none of them can see an answer: a credential pasted into a message, another crew's card
+quoted back, or a turn that says more than the card is worth are all invisible until the text
+exists. the crawled frameworks agree on the taxonomy and disagree on coverage, and the one thing
+they agree on is that agent-level rails fire only at chain endpoints, which is why the tool rail
+is separate from the input rail. this is the same argument one layer further out: the endpoint
+of a turn is the answer, so the answer needs its own check.
+
+three decisions inside it are worth naming. the rail reads the whole turn, not the message,
+because the command is where a credential most often appears and a rail that skips it is a rail
+that misses the case it was built for. the refusal never echoes the match, because a rail that
+prints the secret has written the secret into the log it protects; the row keeps the shape, the
+offset and the length, which is enough to find the line in the run's steps. and a forbidden
+pattern that does not compile is refused when the rail is set rather than when it fires, because
+a regex with a typo passes everything and looks exactly like a rail that is working.
+
+the foreign_refs rail is deliberately narrow. it refuses an answer that names a card id from
+another crew, and it does not try to judge whether the answer leaked the idea behind the card.
+a rail that guesses is a rail whose refusals have to be argued with at 3am, and the whole point
+of a guardrail over a gate is that nobody has to be awake for it.

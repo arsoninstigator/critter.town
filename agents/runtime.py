@@ -200,6 +200,25 @@ def build_model(settings: Settings, override: dict | None = None) -> AgentModel:
     return DeterministicModel()
 
 
+def answer_text(action: dict) -> str:
+    """everything a turn would say out loud, as one string.
+
+    the output rail is checking what leaves, so it has to see all of it: the thought is
+    written to the run, the commands are executed, the message is posted and the result is
+    approved. a rail that only read the message would miss the secret in the command.
+    """
+    parts = [str(action.get("thought") or "")]
+    parts.extend(str(command) for command in (action.get("commands") or []))
+    message = action.get("message") or {}
+    if isinstance(message, dict):
+        parts.append(str(message.get("body") or ""))
+    result = action.get("result") or {}
+    if isinstance(result, dict):
+        parts.append(str(result.get("summary") or ""))
+        parts.append(str(result.get("output") or ""))
+    return "\n".join(part for part in parts if part)
+
+
 def render_prompt(task: dict, agent: dict, crew: dict, context: dict,
                   inbox: list[dict], intent: str = "", knowledge: str = "") -> str:
     """the prompt a run starts from. `intent` goes above the task on purpose: an agent

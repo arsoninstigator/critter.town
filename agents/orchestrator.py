@@ -28,7 +28,7 @@ from core.db import Store, dumps, loads, new_id, now
 from work import topology
 from core.errors import CritterTownError, NotAllowed, NotFound, ValidationError
 from ingredients.projectmanagement.kanban.board import KanbanService
-from agents.runtime import AgentModel, build_model, render_prompt
+from agents.runtime import AgentModel, answer_text, build_model, render_prompt
 from sandbox import Handle, ProviderRegistry
 
 
@@ -217,6 +217,13 @@ class CrewRunner:
             done = False
             for turn in range(1, max_turns + 1):
                 action = self.model.act(system_prompt, prompt)
+                if self.guardrails is not None:
+                    # the answer is checked before a command runs or a message leaves.
+                    # a rail that fires afterwards is a report, not a rail.
+                    self.guardrails.enforce_output(
+                        task["team_id"], answer_text(action), agent_id=agent["id"],
+                        context={"foreign_refs": self._foreign_refs(task["team_id"])},
+                        task=task, run_id=run_id)
                 turn_steps = []
                 for command in action.get("commands", []):
                     outcome = provider.exec(handle, command, timeout=min(self.settings.sandbox_timeout_seconds, 600))
@@ -389,6 +396,18 @@ class CrewRunner:
         return provider, Handle.from_dict(computer["handle"])
 
     # ---- runs ----------------------------------------------------------
+    def _foreign_refs(self, team_id: str, limit: int = 400) -> list[str]:
+        """the card ids that belong to other crews.
+
+        this is what makes the foreign_refs rail answerable: an answer that names one of
+        these has quoted work its crew cannot see, and the rail does not need to know
+        which crew or what the card said to refuse it.
+        """
+        rows = self.store.query(
+            "select id from tasks where team_id != ? order by created_date desc limit ?",
+            (team_id, limit))
+        return [row["id"] for row in rows]
+
     def _retire_sidecars(self, task_id: str) -> None:
         if self.profile is None:
             return

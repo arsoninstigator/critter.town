@@ -286,6 +286,22 @@ def create_api(app: App | None = None) -> FastAPI:
             raise ValidationError("this agent has no computer provisioned yet")
         return computer
 
+    # ---- rails on what the answer carries ---------------------------------
+    # a rail is a no decided in advance, so it can be checked at 3am. the output rail is
+    # the only one that runs after the model speaks, and the only one that can see a
+    # secret pasted into a message.
+    @api.post("/crews/{team_id}/rails/check-output")
+    def check_output(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.guardrails.check_output(
+            team_id, str(data.get("text") or ""),
+            agent_id=str(data.get("agent_id") or ""),
+            context={"foreign_refs": data.get("foreign_refs") or []})
+
+    @api.get("/crews/{team_id}/rail-refusals")
+    def rail_refusals(team_id: str, limit: int = Query(50)) -> dict:
+        return {"refusals": app.guardrails.refusals(team_id, limit=limit)}
+
     # ---- skills ---------------------------------------------------------
     # a skill is a SKILL.md: a name, a description that says when to use it, and a body.
     # the list route answers level 1 only, because that is what a caller needs to choose.

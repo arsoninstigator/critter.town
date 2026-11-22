@@ -18,6 +18,7 @@ two rules the rest of the code relies on:
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -25,9 +26,12 @@ from core.db import Store, dumps, loads, new_id, now
 from core.errors import NotAllowed, NotFound, ValidationError
 
 # a number (per day or at once) or a list (hosts, tools)
-NUMERIC = ("spend_per_day", "open_cards", "parallel_runs", "card_moves_per_day")
-LISTS = ("egress_hosts", "forbidden_tools")
-KINDS = NUMERIC + LISTS
+NUMERIC = ("spend_per_day", "open_cards", "parallel_runs", "card_moves_per_day",
+           "max_output_chars")
+LISTS = ("egress_hosts", "forbidden_tools", "secret_shapes", "forbidden_patterns")
+# a limit on what the answer carries out, which nothing before dispatch can see
+CONTENT = ("secret_shapes", "forbidden_patterns", "max_output_chars", "foreign_refs")
+KINDS = NUMERIC + LISTS + ("foreign_refs",)
 
 # which action each kind can answer
 ANSWERS = {
@@ -35,6 +39,25 @@ ANSWERS = {
     "sandbox": ("forbidden_tools",),
     "egress": ("egress_hosts",),
     "card_move": ("card_moves_per_day",),
+    # the only action that runs after the model has spoken
+    "output": CONTENT,
+}
+
+# the shapes a secret takes in practice. these are matched, never echoed: a rail that
+# prints what it caught writes the secret into the log it was protecting.
+SECRET_SHAPES = {
+    "private_key": r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    # the negative lookahead is not fussiness: without it every anthropic key is
+    # reported as an openai key, and a refusal that names the wrong provider sends
+    # whoever reads it to rotate the wrong credential
+    "openai_key": r"\bsk-(?!ant-)[A-Za-z0-9_-]{20,}",
+    "anthropic_key": r"\bsk-ant-[A-Za-z0-9_-]{20,}",
+    "github_token": r"\bgh[pousr]_[A-Za-z0-9]{20,}",
+    "aws_key": r"\bAKIA[0-9A-Z]{16}\b",
+    "slack_token": r"\bxox[abprs]-[A-Za-z0-9-]{10,}",
+    "jwt": r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.",
+    "bearer": r"\bBearer\s+[A-Za-z0-9._-]{20,}",
+    "env_assignment": r"\b[A-Z][A-Z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD)\s*=\s*\S{8,}",
 }
 
 
@@ -88,6 +111,33 @@ class GuardrailService:
                 raise ValidationError(f"{kind} takes a number")
             if value < 0:
                 raise ValidationError(f"{kind} cannot be negative")
+        elif kind == "foreign_refs":
+            # a switch, not a number: naming another crew's card in an answer is either
+            # allowed or it is not, and there is nothing to count
+            if not isinstance(value, bool):
+                raise ValidationError("foreign_refs takes true or false")
+        elif kind == "forbidden_patterns":
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                raise ValidationError("forbidden_patterns takes a list of patterns")
+            for pattern in value:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    # a pattern that does not compile would pass every answer, which is
+                    # a rail that is not there. refused at set time instead.
+                    raise ValidationError(
+                        f"that pattern does not compile: {exc}", pattern=pattern) from exc
+            value = [v for v in value if v.strip()]
+        elif kind == "secret_shapes":
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                raise ValidationError("secret_shapes takes a list of shape names")
+            # "all" is the shorthand for every shape, so it is a shape name too
+            unknown = sorted(set(value) - set(SECRET_SHAPES) - {"all"})
+            if unknown:
+                raise ValidationError(
+                    f"unknown secret shape(s): {', '.join(unknown)}; "
+                    f"known ones are {sorted(SECRET_SHAPES)}")
+            value = sorted(set(value))
         else:
             if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                 raise ValidationError(f"{kind} takes a list of strings")
@@ -169,6 +219,115 @@ class GuardrailService:
                     "action": action,
                 }
         return {"allowed": True, "action": action}
+
+    # ---- the output rail -------------------------------------------------
+    def check_output(self, team_id: str, text: str, agent_id: str = "",
+                     context: dict | None = None) -> dict:
+        """what the answer carries out. the one place a rail runs after the fact.
+
+        every other action here happens before the work: dispatch, sandbox, egress, a
+        card move. none of them can see an answer, because the answer does not exist
+        yet, so a secret pasted into a message, another crew's card quoted back, or a
+        tool call proposed in prose all leave through a door no pre-dispatch rail covers.
+
+        the refusal names the rail, the shape and where in the text it was, and never
+        the text itself: a rail that echoes what it caught has written the secret into
+        the log it was protecting.
+        """
+        context = context or {}
+        rails = [r for r in self.list(team_id)
+                 if r["kind"] in CONTENT and r["agent_id"] in ("", agent_id)]
+        for rail in rails:
+            found = self._output_verdict(rail, text or "", context)
+            if found:
+                return {"allowed": False, "guardrail_id": rail["id"], "kind": rail["kind"],
+                        "value": rail["value"], "reason": found["reason"],
+                        "at": found["at"], "agent_id": rail["agent_id"],
+                        "action": "output", "chars": len(text or "")}
+        return {"allowed": True, "action": "output", "chars": len(text or "")}
+
+    def enforce_output(self, team_id: str, text: str, agent_id: str = "",
+                       context: dict | None = None, task: dict | None = None,
+                       run_id: str = "") -> dict:
+        """check the answer, and if it is refused, leave the receipt and raise.
+
+        the receipt is a row rather than a task event, because an output refusal has no
+        card movement to attach to and the answer itself must not be stored. what is
+        stored is the rail, the shape, the offset and the length, which is enough to
+        find the line in the run's own steps and not enough to leak it.
+        """
+        verdict = self.check_output(team_id, text, agent_id=agent_id, context=context)
+        if verdict["allowed"]:
+            return verdict
+        with self.store.tx() as c:
+            c.execute(
+                """insert into rail_refusals
+                   (id, team_id, agent_id, task_id, run_id, guardrail_id, kind, action,
+                    reason, at, chars, created_date)
+                   values (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (new_id("rrf"), team_id, agent_id, (task or {}).get("id", "") or "",
+                 run_id, verdict["guardrail_id"], verdict["kind"], "output",
+                 verdict["reason"], int(verdict.get("at") or 0), verdict["chars"], now()))
+        if self.strikes is not None and agent_id:
+            try:
+                self.strikes.record(team_id, agent_id, "output_refused",
+                                    tool=verdict["kind"], note=str(verdict["reason"])[:200])
+            except Exception:
+                pass
+        self._audit("guardrail.refused", team_id, agent_id,
+                    {"guardrail_id": verdict["guardrail_id"], "action": "output",
+                     "kind": verdict["kind"], "reason": verdict["reason"]}, "guardrail")
+        raise NotAllowed(verdict["reason"], guardrail=verdict["guardrail_id"],
+                         kind=verdict["kind"], action="output")
+
+    def refusals(self, team_id: str, limit: int = 50) -> list[dict]:
+        rows = self.store.query(
+            """select * from rail_refusals where team_id = ?
+               order by created_date desc limit ?""", (team_id, limit))
+        return [{"id": r["id"], "agent_id": r["agent_id"], "task_id": r["task_id"],
+                 "run_id": r["run_id"], "guardrail_id": r["guardrail_id"],
+                 "kind": r["kind"], "action": r["action"], "reason": r["reason"],
+                 "at": r["at"], "chars": r["chars"], "created_date": r["created_date"]}
+                for r in rows]
+
+    def _output_verdict(self, rail: dict, text: str, context: dict) -> dict | None:
+        kind, value = rail["kind"], rail["value"]
+        if kind == "max_output_chars":
+            if len(text) > int(value):
+                return {"reason": f"max_output_chars: the answer is {len(text)} characters, "
+                                  f"the limit is {int(value)}", "at": int(value)}
+            return None
+        if kind == "secret_shapes":
+            shapes = list(SECRET_SHAPES) if value == ["all"] else list(value)
+            for name in shapes:
+                pattern = SECRET_SHAPES.get(name)
+                if not pattern:
+                    continue
+                match = re.search(pattern, text)
+                if match:
+                    return {"reason": f"secret_shapes: {name} at character {match.start()} "
+                                      f"({match.end() - match.start()} characters)",
+                            "at": match.start()}
+            return None
+        if kind == "forbidden_patterns":
+            for pattern in value:
+                match = re.search(pattern, text)
+                if match:
+                    return {"reason": f"forbidden_patterns: {pattern} matched at character "
+                                      f"{match.start()}", "at": match.start()}
+            return None
+        if kind == "foreign_refs":
+            if value is False:
+                return None
+            foreign = [ref for ref in (context.get("foreign_refs") or [])
+                       if ref and ref in text]
+            if foreign:
+                # the id is named, the card behind it is not: the refusal goes to the
+                # crew that owns the run, and the other crew's title is not its business
+                return {"reason": f"foreign_refs: the answer names {len(foreign)} id(s) "
+                                  f"from another crew", "at": text.find(foreign[0])}
+            return None
+        return None
 
     def _audit(self, event: str, team_id: str, agent_id: str, payload: dict,
                actor: str) -> None:

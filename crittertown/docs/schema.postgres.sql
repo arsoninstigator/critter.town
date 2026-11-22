@@ -639,6 +639,24 @@ create table if not exists guardrails (
 );
 create index if not exists guardrails_scope on guardrails (team_id, agent_id, status);
 
+-- v24: a refusal that happened after the model spoke. the answer is never stored here,
+-- only where in it the rail fired, so a log of refusals is not a log of secrets.
+create table if not exists rail_refusals (
+  id text primary key,
+  team_id text not null,
+  agent_id text not null default '',
+  task_id text not null default '',
+  run_id text not null default '',
+  guardrail_id text not null default '',
+  kind text not null default '',
+  action text not null default 'output',
+  reason text not null default '',
+  at integer not null default 0,
+  chars integer not null default 0,
+  created_date double precision not null
+);
+create index if not exists rail_refusals_team on rail_refusals (team_id, created_date);
+
 -- self improvement: an agent proposes, a person disposes, and the proposal is a row
 -- so the profile can say where an instruction came from.
 -- v23: skills. a skill is know-how with a name and a trigger, loaded in three stages so a

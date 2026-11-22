@@ -357,6 +357,26 @@ calls itself, whenever it decides to: the browser, the sandbox, workflows for a 
 board. the difference is who decides the order. a workflow decides for a node; the agent
 decides for a service.
 
+### output rail
+
+the only rail that runs after the model has spoken. every other one answers before the work:
+may this be dispatched, may a sandbox start, may this host be reached, may this card move. all
+of them are blind to the answer, because at dispatch the answer does not exist yet, and the
+things that only exist in an answer leave through a door nothing was watching.
+
+four kinds, all data rather than code: `secret_shapes` (private keys, provider tokens, bearer
+tokens, env assignments, and `all` as shorthand), `forbidden_patterns` (regexes, refused at set
+time if they do not compile, since a pattern that does not compile passes everything),
+`max_output_chars`, and `foreign_refs` (an answer that names another crew's card id).
+
+the rail reads the whole turn, not just the message: the thought, every command, the message
+body and the result summary. a rail that only read the message would miss the credential in
+the command it was about to run.
+
+a refusal never echoes what it caught. the row carries the rail, the shape, the offset and the
+length; the text stays in the run's own steps. a rail that prints the secret has written the
+secret into the log it was protecting.
+
 ### skill
 
 know-how an agent can carry, in the agentskills.io shape: a `SKILL.md` with a name, a

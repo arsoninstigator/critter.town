@@ -185,6 +185,19 @@ agent. `problems` are structural (a gated shape in a one-agent crew, a seat with
 left) and `gaps` are staffing. the runner passes a seat role into `context.compose`, which
 intersects the role's entitlement with the agent's enabled slices.
 
+### the output rail, and the rows it leaves
+
+`POST /crews/{team_id}/rails/check-output` takes `{text, agent_id?, foreign_refs?}` and answers
+with the verdict, naming the rail, the shape and the offset and never the matched text.
+`GET /crews/{team_id}/rail-refusals` lists what refused recently, from `rail_refusals`, which
+stores the rail, the kind, the offset and the length but never the answer.
+
+the rail is set like any other: `secret_shapes` takes a list of shape names or `["all"]`,
+`forbidden_patterns` a list of regexes (an uncompilable one is refused at set time),
+`max_output_chars` a number, `foreign_refs` true or false. the runner calls it on every turn,
+before a command runs or a message leaves, so a refused turn fails the run as blocked with the
+rail named rather than posting the message and reporting afterwards.
+
 ### skills: three stages and two budgets
 
 `POST /crews/{id}/skills` takes either a `SKILL.md` as `{text}` or the same fields as json, and
