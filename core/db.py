@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 SCHEMA = """
 create table if not exists meta (
@@ -661,6 +661,39 @@ create index if not exists guardrails_scope on guardrails (team_id, agent_id, st
 
 -- self improvement: an agent proposes, a person disposes, and the proposal is a row
 -- so the profile can say where an instruction came from.
+-- v23: skills. a skill is know-how with a name and a trigger, loaded in three stages so a
+-- crew with forty of them does not spend forty bodies of context on a card that needs none.
+create table if not exists skills (
+  id text primary key,
+  team_id text not null,
+  name text not null,
+  description text not null,
+  body text not null default '',
+  allowed_tools text not null default '[]',
+  metadata text not null default '{}',
+  license text not null default '',
+  -- addressed to nobody is addressed to everyone: an empty list means the whole crew
+  agents text not null default '[]',
+  origin text not null default 'authored',
+  source text not null default '',
+  enabled integer not null default 1,
+  body_chars integer not null default 0,
+  created_date real not null,
+  updated_date real not null
+);
+create unique index if not exists skills_name on skills (team_id, name);
+
+-- level 3: a bundled file is read on demand and never enters a slice
+create table if not exists skill_files (
+  id text primary key,
+  skill_id text not null references skills(id) on delete cascade,
+  path text not null,
+  content text not null default '',
+  bytes integer not null default 0,
+  created_date real not null
+);
+create unique index if not exists skill_files_path on skill_files (skill_id, path);
+
 create table if not exists lessons (
     id text primary key,
     team_id text not null,

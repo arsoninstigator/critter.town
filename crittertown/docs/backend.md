@@ -185,6 +185,23 @@ agent. `problems` are structural (a gated shape in a one-agent crew, a seat with
 left) and `gaps` are staffing. the runner passes a seat role into `context.compose`, which
 intersects the role's entitlement with the agent's enabled slices.
 
+### skills: three stages and two budgets
+
+`POST /crews/{id}/skills` takes either a `SKILL.md` as `{text}` or the same fields as json, and
+answers with the stored skill. `GET /crews/{id}/skills` is level 1: name, description, tool
+list and file count, never a body, because a list of skills is what a caller reads to choose
+one. `POST /skills/{id}/load` is level 2 and refuses a body over the budget it is given
+(`body_over_budget`) instead of truncating it; `GET /skills/{id}/files?path=` is level 3.
+
+the refusals are the security story: `frontmatter_missing`, `skill_name_not_a_slug`,
+`description_must_say_when`, `description_too_thin`, `body_required`, `body_too_long`,
+`allowed_tool_unscoped`, `skill_unreachable`, `file_path_escapes`, `file_too_large`. an empty
+`agents` list means the whole crew; `PATCH /skills/{id}` sets `enabled` and `agents`, and a
+disabled skill is neither offered at level 1 nor loadable.
+
+the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
+researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
+
 ### the heartbeat: an agent we do not run
 
 `POST /agents/{id}/heartbeat` with `{key, ttl_seconds}` is how a worker built somewhere else asks

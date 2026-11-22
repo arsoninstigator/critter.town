@@ -489,3 +489,34 @@ one wart was fixed on the way through. `add_agent` reported every insert failure
 exists", which turned a missing column into a duplicate name and cost a debugging round. it now
 catches only an integrity violation, because an error that lies about its cause is worse than one
 that is vague.
+
+## a skill is loaded in three stages or it is not loaded
+
+**decided.** skills follow the agentskills.io `SKILL.md` contract, stored as rows with their
+bundled files beside them, and loaded in three stages whose budgets are enforced.
+
+the format is worth adopting rather than inventing because it is already what other tools
+export and because it is small enough to be a contract: a name, a description, a body, optional
+allowed-tools. the description is the whole retrieval mechanism, so the loader refuses one that
+does not say when to use the skill. a description that only says what the skill does is a skill
+that never fires, and a skill that never fires is a file nobody reads. thin, absent and
+when-less descriptions are all refused for that reason, which is stricter than the spec and
+deliberately so: the spec's own guidance is the rule, and a rule that is only guidance is one
+nobody follows.
+
+progressive disclosure became a slice rather than a promise. level 1 is one line per skill in
+the `skills` slice, budgeted at 500 characters and reporting how many did not fit. level 2 is
+`load_skill`, which refuses a body over its budget instead of truncating it. level 3 is
+`read_skill_file`, which never enters a slice at all. the alternative, pasting every body into
+the prompt, spends the card's context on the forty skills it does not need, and an agent that
+read none of it is not better informed, it is less.
+
+the security rule is the part that had to be a rule and not a check. a skill may not widen a
+permission: if it could, importing a skill would be importing a permission decision from
+outside, which is exactly what the four roots and the crossing wall exist to prevent. so an
+unscoped `bash` in allowed-tools is refused, a bundled path may not climb out of the skill, and
+bundled scripts run on the agent's own computer, under the same rails as any other call.
+
+one more thing is refused by name: a skill with `disable-model-invocation: true` and
+`user-invocable: false` is unreachable by both routes, so it is a file rather than a skill and
+the loader says so.

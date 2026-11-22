@@ -286,6 +286,62 @@ def create_api(app: App | None = None) -> FastAPI:
             raise ValidationError("this agent has no computer provisioned yet")
         return computer
 
+    # ---- skills ---------------------------------------------------------
+    # a skill is a SKILL.md: a name, a description that says when to use it, and a body.
+    # the list route answers level 1 only, because that is what a caller needs to choose.
+    @api.post("/crews/{team_id}/skills")
+    def create_skill(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.skills.create(
+            team_id,
+            text=str(data.get("text") or ""),
+            name=str(data.get("name") or ""),
+            description=str(data.get("description") or ""),
+            body=str(data.get("body") or ""),
+            allowed_tools=data.get("allowed_tools") or [],
+            agents=data.get("agents") or [],
+            origin=str(data.get("origin") or "authored"),
+            source=str(data.get("source") or ""),
+        )
+
+    @api.get("/crews/{team_id}/skills")
+    def list_skills(team_id: str, include_disabled: bool = Query(False),
+                    agent_id: str = Query("")) -> dict:
+        return {"skills": app.skills.list(team_id, include_disabled=include_disabled,
+                                          agent_id=agent_id)}
+
+    @api.get("/skills/{skill_id}")
+    def get_skill(skill_id: str) -> dict:
+        return app.skills.get(skill_id)
+
+    @api.patch("/skills/{skill_id}")
+    def patch_skill(skill_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.skills.patch(skill_id, enabled=data.get("enabled"),
+                                agents=data.get("agents"))
+
+    @api.delete("/skills/{skill_id}")
+    def delete_skill(skill_id: str) -> dict:
+        return app.skills.delete(skill_id)
+
+    # level 2: the body, charged to this call and not to a slice
+    @api.post("/skills/{skill_id}/load")
+    def load_skill(skill_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        budget = int(data.get("budget") or 8000)
+        return app.skills.load(skill_id, budget=budget)
+
+    # level 3: one bundled file, read at the moment it is needed
+    @api.post("/skills/{skill_id}/files")
+    def add_skill_file(skill_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.skills.add_file(skill_id, str(data.get("path") or ""),
+                                   str(data.get("content") or ""))
+
+    @api.get("/skills/{skill_id}/files")
+    def read_skill_file(skill_id: str, path: str = Query(...)) -> dict:
+        return app.skills.read_file(skill_id, path)
+
     # ---- external agents ------------------------------------------------
     # a worker the platform does not run: it beats, and the answer is a card it now holds
     # or a reason there is nothing for it. the key is the agent's own, so a heartbeat cannot

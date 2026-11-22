@@ -357,6 +357,32 @@ calls itself, whenever it decides to: the browser, the sandbox, workflows for a 
 board. the difference is who decides the order. a workflow decides for a node; the agent
 decides for a service.
 
+### skill
+
+know-how an agent can carry, in the agentskills.io shape: a `SKILL.md` with a name, a
+description, and a body, plus optional bundled files. the description is the retrieval
+mechanism, not a summary: an agent decides whether a skill applies by reading one line, so a
+description that says what but not when is a skill that never fires. the loader refuses that,
+and refuses a thin description, a body too large to read in one turn, a name that is not a
+slug, and an unscoped shell in `allowed-tools`, because a skill is text a foreign author wrote
+whose scripts run on the agent's computer.
+
+a skill cannot widen a permission. that is a rule rather than a check: if a skill could grant
+reach, importing a skill would be importing a permission decision from outside, which is the
+one thing the four roots exist to prevent.
+
+### progressive disclosure
+
+the three stages a skill is loaded in, and the reason the stages are budgets rather than
+habits. level 1 is name and description, one line each, resident in the `skills` slice. level
+2 is the body, fetched with `load_skill` when the agent decides the skill applies, charged to
+that call. level 3 is one bundled file, fetched with `read_skill_file` at the moment it is
+needed, never entering a slice at all.
+
+a crew with forty skills therefore costs forty lines on a card that needs none of them, and a
+body over the budget is refused rather than truncated, since half a procedure read as a whole
+one is worse than no skill.
+
 ### external worker
 
 an agent this platform does not run. the model, the harness and the tools live somewhere else,

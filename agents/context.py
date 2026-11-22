@@ -21,6 +21,8 @@ from core.db import Store, dumps, loads, new_id, now
 # truncated and says so, rather than pushing the card out of the prompt.
 SLICES: dict[str, int] = {
     "intent": 600,
+    # level 1 of every skill this agent may use: name and description, nothing else
+    "skills": 500,
     "knowledge": 900,
     "lessons": 600,
     "task": 500,
@@ -30,18 +32,20 @@ SLICES: dict[str, int] = {
     "crew": 300,
 }
 
-ORDER = ("intent", "knowledge", "lessons", "task", "board", "inbox", "failures", "crew")
+ORDER = ("intent", "skills", "knowledge", "lessons", "task", "board", "inbox",
+         "failures", "crew")
 
 
 class ContextSlicer:
     def __init__(self, store: Store, crews=None, kanban=None, intent=None, knowledge=None,
-                 profile=None, a2a=None):
+                 profile=None, a2a=None, skills=None):
         self.store = store
         self.crews = crews
         self.kanban = kanban
         self.intent = intent
         self.knowledge = knowledge
         self.profile = profile
+        self.skills = skills
         self.a2a = a2a
 
     # ---- the slices ----------------------------------------------------
@@ -129,6 +133,21 @@ class ContextSlicer:
         values = (self.crews.context(agent["team_id"]) or {}).get("values") or {}
         for key, value in list(values.items())[:5]:
             lines.append(f"{key} = {dumps(value)[:120]}")
+        return lines
+
+    def _slice_skills(self, agent: dict, task: dict | None) -> list[str]:
+        """level 1 only. the body arrives when the agent asks for it, which is the whole
+        point of the split: forty skills cost forty lines, not forty procedures."""
+        if self.skills is None:
+            return []
+        offered = self.skills.discovery(agent["team_id"], agent_id=agent["id"],
+                                        budget=SLICES["skills"])
+        if not offered["lines"]:
+            return []
+        lines = ["skills you may load with load_skill:"]
+        lines.extend(offered["lines"])
+        if offered["withheld"]:
+            lines.append(f"({offered['withheld']} more did not fit this slice)")
         return lines
 
     def _build(self, name: str, agent: dict, task: dict | None) -> list[str]:

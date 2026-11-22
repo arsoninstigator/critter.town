@@ -58,6 +58,7 @@ from work.budget import BudgetService
 from work.dispatch import DispatchService
 from work.replenish import ReplenishService
 from work.heartbeat import HeartbeatService
+from work.skills import SkillService
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -119,6 +120,8 @@ class App:
     silence: SilenceService
     # a worker we do not run asks here for work, and the answer is a card or a reason
     heartbeat: HeartbeatService
+    # know-how an agent can carry, loaded in three stages rather than all at once
+    skills: SkillService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -344,8 +347,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
 
     # every run is handed a slice of the crew's working context, and the slice it was
     # handed is written down, because a prompt nobody kept is a claim about a run
+    # skills: level 1 lives in the context slice, levels 2 and 3 are fetched on demand
+    skills = SkillService(store, crews=crews)
     context = ContextSlicer(store, crews=crews, kanban=kanban, intent=intent,
-                            knowledge=knowledge, profile=profile, a2a=a2a)
+                            knowledge=knowledge, profile=profile, a2a=a2a, skills=skills)
     runner.context = context
 
     kanban.events_hook = emit
@@ -409,6 +414,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         replenish=replenish,
         silence=silence,
         heartbeat=heartbeat,
+        skills=skills,
         polls=polls,
         browsers=browsers,
         ops=ops,

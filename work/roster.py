@@ -26,10 +26,10 @@ from agents import archetypes, external
 # role -> the slices that role is entitled to. absence is a decision: a reviewer is not
 # entitled to `lessons` (the doer's own teaching) or `inbox` (other people's requests).
 ROLE_SLICES: dict[str, tuple[str, ...]] = {
-    "doer": ("intent", "knowledge", "lessons", "task", "failures"),
+    "doer": ("intent", "skills", "knowledge", "lessons", "task", "failures"),
     "reviewer": ("task", "board", "failures"),
     "integrator": ("task", "board", "knowledge"),
-    "researcher": ("intent", "knowledge", "task", "inbox"),
+    "researcher": ("intent", "skills", "knowledge", "task", "inbox"),
     "synthesizer": ("knowledge", "task", "lessons"),
     "sampler": ("task", "board"),
 }
