@@ -285,7 +285,9 @@ synthesis becomes a smoothing.
 
 ### strike
 one row per refusal against a seat. two strikes freeze the seat, a person clears them by
-looking, and burn has no inverse. the point is that "why is this seat frozen" is a query.
+looking, and burn has no inverse. the point is that "why is this seat frozen" is a query, and
+`GET /crews/{id}/strikes` is that query for a whole crew in one read: every seat with its
+count, its state and its last strike, plus the frozen and burned lists.
 
 ### crossing
 a declared door between two crews: direction, envelope kinds, a rate, a size, an expiry.

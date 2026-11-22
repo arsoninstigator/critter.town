@@ -1032,6 +1032,11 @@ def create_api(app: App | None = None) -> FastAPI:
     def agent_standing(agent_id: str) -> dict:
         return app.strikes.check(agent_id)
 
+    @api.get("/crews/{team_id}/strikes")
+    def crew_strikes(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.strikes.crew(team_id)
+
     @api.post("/crews/{team_id}/strikes")
     def record_strike(team_id: str, payload: dict = Body(...)) -> dict:
         data = body(payload)

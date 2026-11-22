@@ -75,6 +75,22 @@ class StrikeService:
                 (by, team_id, agent_id))
         return self.standing(agent_id)
 
+    def crew(self, team_id: str) -> dict:
+        """every seat in the crew and where it stands, because a freeze nobody can see is
+        a freeze that gets discovered by a card not moving."""
+        agents = self.store.query(
+            "select id, name, role, kind from agents where team_id = ? order by name",
+            (team_id,))
+        seats = []
+        for agent in agents:
+            standing = self.standing(agent["id"])
+            seats.append({**standing, "name": agent["name"], "role": agent["role"],
+                          "kind": agent["kind"]})
+        return {"seats": seats,
+                "frozen": [s["seat"] for s in seats if s["state"] == "frozen"],
+                "burned": [s["seat"] for s in seats if s["state"] == "burned"],
+                "limit": STRIKE_LIMIT}
+
     def check(self, agent_id: str) -> dict:
         """the door: a frozen seat is not offered work."""
         standing = self.standing(agent_id)

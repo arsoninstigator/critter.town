@@ -122,12 +122,21 @@ var R = {
   workflowResult: "workflow-runs/{workflow_run}",
   workflowResume: "workflow-runs/{workflow_run}/resume",
   sidecars: "agents/{agent}/sidecars",
-  context: "agents/{agent}/context"
+  context: "agents/{agent}/context",
+  // the units above a card, and the count behind a freeze. both were api-only, which
+  // meant a project that had not moved and a seat that had stopped working were facts
+  // you had to know to ask for.
+  projects: "crews/{team}/projects",
+  projectGate: "projects/{project}/gate",
+  advanceProject: "projects/{project}/advance",
+  killProject: "projects/{project}/kill",
+  strikes: "crews/{team}/strikes",
+  clearStrikes: "crews/{team}/strikes/{agent}/clear"
 };
 
 var NAMESPACES = ["skills","scope","memory","instructions","knowledge","perms","tools","vertical","spawn"];
 var VIEWS = ["board","calendar","inbox","runs","workflows","profile","computer",
-             "access","routines","guardrails"];
+             "access","routines","guardrails","projects","strikes"];
 
 var state = { crews: [], team: null, channels: [], agents: [], agent: null, view: "board",
               workflow: null, workflowRun: null };
@@ -252,6 +261,8 @@ async function renderView() {
     else if (state.view === "routines") await renderRoutines(view, params);
     else if (state.view === "guardrails") await renderGuardrails(view, params);
     else if (state.view === "workflows") await renderWorkflows(view, params);
+    else if (state.view === "projects") await renderProjects(view, params);
+    else if (state.view === "strikes") await renderStrikes(view, params);
   } catch (err) {
     say(err.message, true);
     view.appendChild(el("div", { class: "panel" }, [
@@ -699,6 +710,111 @@ async function renderGuardrails(view, params) {
   view.appendChild(panel);
   view.appendChild(el("div", { class: "muted",
     text: "a limit answers without a person. it refuses before a card moves, and the refusal is counted apart from a failure." }));
+}
+
+async function renderProjects(view, params) {
+  var data = await api(R.projects, { team: params.team });
+  var projects = data.projects || [];
+  var panel = el("div", { class: "panel" }, [el("h2", { text: "projects" })]);
+  panel.appendChild(el("div", { class: "meta", text: projects.length
+    ? projects.length + " in flight"
+    : "no projects. a card is hours; a project is the thing that has to survive a month" }));
+  for (var i = 0; i < projects.length; i++) {
+    var project = projects[i];
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { text: project.name }));
+    card.appendChild(el("div", { class: "meta",
+      text: project.phase + " · v" + (project.version || 0) + " · "
+            + ((project.slices || []).length) + " slice(s)" }));
+    // the build log is the answer to "which build, and what did it move"
+    (project.builds || []).slice(-3).forEach(function (build) {
+      card.appendChild(el("div", { class: "meta",
+        text: "v" + build.version + " " + build.verdict
+              + (build.metric ? " · " + build.metric : "")
+              + (build.ended_at ? " · " + when(build.ended_at) : "") }));
+    });
+    // the gate is read before it is offered, so a button that would refuse says so first
+    var gate = await api(R.projectGate, { project: project.id });
+    var unmet = gate.unmet || [];
+    card.appendChild(el("div", { class: "meta", text: unmet.length
+      ? "gate held by: " + unmet.map(function (c) { return c.id; }).join(", ")
+      : "gate open: every check on this phase reads ok" }));
+    var row = el("div", { class: "row" });
+    if (!unmet.length && ["closed", "killed"].indexOf(project.phase) === -1) {
+      row.appendChild(el("button", { text: "advance", onclick: async function () {
+        try {
+          var out = await api(R.advanceProject, { project: project.id },
+            { method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ facts: {} }) });
+          say("moved to " + out.phase + (out.version ? " (v" + out.version + ")" : ""));
+          renderView();
+        } catch (err) { say(err.message, true); }
+      }}));
+    }
+    if (["closed", "killed"].indexOf(project.phase) === -1) {
+      row.appendChild(el("button", { class: "warn", text: "kill", onclick: async function () {
+        var criteria = project.kill_criteria || [];
+        if (!criteria.length) { say("this project declared no kill criteria", true); return; }
+        var criterion = window.prompt("which declared criterion fired?\n\n" + criteria.join("\n"), criteria[0]);
+        if (!criterion) return;
+        var reason = window.prompt("what happened, in a sentence someone can read?");
+        if (!reason) return;
+        try {
+          await api(R.killProject, { project: project.id },
+            { method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ criterion: criterion, reason: reason }) });
+          say("killed");
+          renderView();
+        } catch (err) { say(err.message, true); }
+      }}));
+    }
+    card.appendChild(row);
+    panel.appendChild(card);
+  }
+  view.appendChild(panel);
+  view.appendChild(el("div", { class: "muted",
+    text: "a phase moves only when its gate reads ok from rows. review has three exits: a moved metric closes it, a declared kill criterion ends it, and a moved metric with a named next scope opens the next build." }));
+}
+
+async function renderStrikes(view, params) {
+  var data = await api(R.strikes, { team: params.team });
+  var seats = data.seats || [];
+  var panel = el("div", { class: "panel" }, [el("h2", { text: "strikes" })]);
+  panel.appendChild(el("div", { class: "meta", text: data.limit
+    ? data.limit + " strike(s) freeze a seat, and only a person unfreezes it"
+    : "two strikes freeze a seat" }));
+  seats.forEach(function (seat) {
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { text: seat.name + (seat.role ? " · " + seat.role : "") }));
+    card.appendChild(el("div", { class: "meta",
+      text: (seat.kind || "general") + " · " + seat.strikes + " strike(s) · " + seat.state }));
+    if (seat.last_strike) {
+      card.appendChild(el("div", { class: "meta",
+        text: "last: " + seat.last_strike.code
+              + (seat.last_strike.note ? " · " + seat.last_strike.note : "")
+              + (seat.last_strike.at ? " · " + when(seat.last_strike.at) : "") }));
+    }
+    if (seat.strikes > 0) {
+      card.appendChild(el("button", { text: "clear", onclick: async function () {
+        var by = window.prompt("who is clearing this, so the row names a person?", "owner");
+        if (!by) return;
+        try {
+          await api(R.clearStrikes, { team: params.team, agent: seat.seat },
+            { method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ by: by }) });
+          say("cleared " + seat.name);
+          renderView();
+        } catch (err) { say(err.message, true); }
+      }}));
+    }
+    panel.appendChild(card);
+  });
+  if (!seats.length) {
+    panel.appendChild(el("div", { class: "muted", text: "no seats in this crew" }));
+  }
+  view.appendChild(panel);
+  view.appendChild(el("div", { class: "muted",
+    text: "a frozen seat is not offered work. burn has no inverse, because a burned seat is a decision someone made." }));
 }
 
 async function renderAccess(view, params) {

@@ -437,3 +437,21 @@ refused message leaves nothing to clean up and nothing to explain later. the row
 question an audit asks and it cannot be inferred once the door has expired. and a message
 inside the crew stores all three empty, because a message that went nowhere should not look
 like it went somewhere.
+
+## two units came out of the api and onto a page
+
+projects and strikes were complete and unreachable. a phase moved, a gate held and a seat froze
+by calling the api directly, which means the only people who could see either were people who
+already knew to ask. a unit that cannot be seen is a unit that is not in the loop.
+
+so the shell gained two views. projects lists each one with its phase, its version, the last
+three builds with the verdict and the metric each was measured on, and the gate it is standing
+at, read before the advance button is offered: a button that always refuses is worse than no
+button. the kill action asks for a declared criterion and a reason, because both are refused by
+the api when they are missing and a prompt is cheaper than a 422. strikes lists every seat in
+the crew with its count, its state and its last strike, and clearing asks who is clearing,
+since a cleared row with no name on it is a shrug.
+
+one route was missing rather than one page: standing was per agent, so a crew view would have
+been n calls. `GET /crews/{id}/strikes` answers for every seat in one read, and names the
+frozen and burned lists so a page does not have to re-derive the rule from the counts.

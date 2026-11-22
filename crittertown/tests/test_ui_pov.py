@@ -22,8 +22,12 @@ ENTRY = re.compile(r'(\w+):\s*"([^"]+)"')
 # everything else it renders is read-only by construction.
 # canvas b adds three: saving a definition, running a workflow, and answering its gate.
 # they are the operator acting in their own editor, not an agent acting through the shell.
+# projects add three more: advancing a phase the gate already opened, killing a project on a
+# criterion it declared at inception, and clearing strikes. all three are the operator acting
+# on their own board, and each one is refused by the api when the rows do not support it.
 WRITES = {"moveTask", "calendar", "profileEntry", "grant", "routineDone", "routinePause",
-          "materialise", "guardrail", "saveWorkflow", "workflowRun", "workflowResume"}
+          "materialise", "guardrail", "saveWorkflow", "workflowRun", "workflowResume",
+          "advanceProject", "killProject", "clearStrikes"}
 
 
 def routes_in(page: str) -> dict[str, str]:
@@ -55,12 +59,24 @@ class PageShapeTests(unittest.TestCase):
         methods = re.findall(r'method:\s*"(\w+)"', POV_PAGE)
         self.assertEqual(sorted(methods),
                          ["DELETE", "DELETE", "POST", "POST", "POST", "POST", "POST",
-                          "POST", "POST", "POST", "POST", "PUT"])
+                          "POST", "POST", "POST", "POST", "POST", "POST", "POST", "PUT"])
         for name in WRITES:
             self.assertIn(name, routes_in(POV_PAGE))
 
     def test_the_new_views_are_in_the_shell(self):
         self.assertIn('"routines","guardrails"', POV_PAGE)
+
+    def test_projects_and_strikes_have_a_page(self):
+        self.assertIn('"projects","strikes"', POV_PAGE)
+        # a project page that cannot read its gate would offer an advance that always
+        # refuses, which is worse than no button
+        self.assertIn("projectGate", POV_PAGE)
+        self.assertIn("gate held by", POV_PAGE)
+        self.assertIn("declared criterion", POV_PAGE)
+        # and a strike page has to name the seat, the count and who cleared it
+        self.assertIn("renderStrikes", POV_PAGE)
+        self.assertIn("strike(s) freeze a seat", POV_PAGE)
+        self.assertIn("who is clearing this", POV_PAGE)
 
     def test_the_workflow_editor_is_in_the_shell(self):
         self.assertIn('"workflows"', POV_PAGE)
@@ -82,6 +98,40 @@ class PageShapeTests(unittest.TestCase):
     def test_isolation_is_its_own_page(self):
         self.assertIn("identical_profiles", ISOLATION_PAGE)
         self.assertIn("crews/{team}/isolation", ISOLATION_PAGE)
+
+
+class PageDataTests(AppCase):
+    """the two new views read routes, so the routes have to answer with what the page draws."""
+
+    def test_the_crew_strike_view_names_the_frozen_seat(self):
+        team = self.crew("strikes")
+        wren = self.agent(team["id"], "wren")
+        self.agent(team["id"], "holt")
+        self.app.strikes.record(team["id"], wren["id"], "guardrail_refused")
+        self.app.strikes.record(team["id"], wren["id"], "guardrail_refused")
+        out = self.app.strikes.crew(team["id"])
+        self.assertEqual(out["frozen"], [wren["id"]])
+        self.assertEqual(len(out["seats"]), 2)
+        row = [s for s in out["seats"] if s["seat"] == wren["id"]][0]
+        self.assertEqual(row["state"], "frozen")
+        self.assertEqual(row["strikes"], 2)
+        self.assertEqual(row["last_strike"]["code"], "guardrail_refused")
+        # and clearing names a person, because a cleared row with no name is a shrug
+        self.app.strikes.clear(team["id"], wren["id"], "owner")
+        self.assertEqual(self.app.strikes.crew(team["id"])["frozen"], [])
+
+    def test_the_project_view_reads_the_gate_it_offers(self):
+        team = self.crew("projects")
+        row = self.app.projects.create(
+            team["id"], "sell the recipe",
+            [{"slice": "recipe", "objective_ref": "obj1"}], 900,
+            ["unit cost stays above the ceiling for a week"], objective_ref="obj1",
+            unit_price_cents=1500, min_margin_pct=0.3)
+        listed = self.app.projects.list(team["id"])
+        self.assertEqual([p["id"] for p in listed], [row["id"]])
+        gate = self.app.projects.evaluate(row["id"])
+        self.assertIn("unmet", gate)
+        self.assertTrue(gate["unmet"])
 
 
 class PageRouteTests(AppCase):

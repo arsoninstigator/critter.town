@@ -282,7 +282,7 @@ projects, claims, strikes, crossings:
 - `POST /crews/{id}/projects`, `GET /crews/{id}/projects`, `GET /projects/{id}`
 - `GET /projects/{id}/gate`, `POST /projects/{id}/advance`, `POST /projects/{id}/kill`
 - `POST /crews/{id}/claims`, `GET /crews/{id}/claims/{thread}`
-- `GET /agents/{id}/standing`, `POST /crews/{id}/strikes`, `POST /crews/{id}/strikes/{agent}/clear`
+- `GET /agents/{id}/standing`, `GET /crews/{id}/strikes` (every seat and where it stands), `POST /crews/{id}/strikes`, `POST /crews/{id}/strikes/{agent}/clear`
 - `POST /crews/{id}/crossings`, `GET /crews/{id}/crossings`, `POST /crews/{id}/crossings/authorize`, `POST /crossings/{id}/revoke`
 
 `POST /a2a` is the one write that can cross a crew boundary. when the recipient belongs to
