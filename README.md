@@ -13,13 +13,6 @@ crittertown is an intentionally assembled architecture for a multi-agent system 
 a dark factory: autonomous, self directed, self driving, long running ai workers carrying out
 end to end operations with almost nobody in the loop.
 
-the phrase is borrowed from lights-out manufacturing, the factory with the lights off because
-nobody is standing in it, and it carries the failure mode that comes with the borrowing: code
-shipping that no person read, verified only by the tests the same agents wrote. so the answer
-here is not more autonomy, it is evidence. a card closes on a reference somebody else can
-check, a gate opens on rows rather than on an opinion, and the parts of the system that decide
-without a person are the parts that were written to be decided without one.
-
 the structure is a distributed hierarchical multi-agent system, an hmas, shaped like an org
 chart, because an org chart is the oldest known answer to "how do a hundred workers finish
 something without one person holding all of it". departments and wings hold teams, teams hold
@@ -75,38 +68,6 @@ what that asks for, and what is being built here:
   while it is being built is a project that rots the moment the build ends. the seat is the
   smaller lifecycle, a live, frozen or burned agent that can be duplicated and retired
   without touching the work it was holding
-
-## four kinds of worker, and the org chart they sit in
-
-an agent that only deals with code should not be handed a research question, and a research
-agent should not be handed a repository to refactor. so a worker's kind is a rule rather than
-a name in a prompt: it caps the seats the agent may fill and the slices it may read, and it
-never widens either. the kinds are the four the mindstudio piece names, plus the honest
-default for an agent nobody has characterised yet:
-
-- `harness`, the coding harness: a repository, a command, a check
-- `autoscientist`, the auto-research loop: finds out what is true before deciding what to do,
-  so it is allowed to be slow, and it is given the knowledge and the inbox
-- `factory`, the batch worker: one item at a time, many times, cheaply
-- `orchestrator`: does not do the work, joins the lanes, and is not given the slices that
-  would tempt it to do a lane's job
-- `general`: no cap, and the label says out loud that nobody has characterised this one
-
-the org chart that hands the work down is not invented here either. paperclip.ing, the open
-source control plane for teams of agents, is the closest public reference for the shape: an
-org chart with roles and permissions, tasks whose delegation flows up and down it, heartbeat
-runs, budgets, approvals and an audit log, on the principle that if something can receive a
-heartbeat it can be hired. what crittertown adds to that shape is the part those systems
-leave to a person. a breakdown is refused when a part has no owner, no funding, a frozen seat
-or a door out of the crew that nobody declared. a gate opens on rows rather than on an
-opinion. and a lease is never taken as evidence that work is happening.
-
-reading those repos, and the ones built on the same idea, the hard code is never the part
-that demos well. it is the watchdog that catches a run producing nothing, the delegation that
-comes back without evidence, the budget that is checked by two cards at once, the approval
-nobody answers, and the sweep that has to decide which of those is a bug and which is a quiet
-week. that is where most of the units in this repo have gone, and `crittertown/docs/decisions.md`
-records why each one is shaped the way it is.
 
 ## the name
 
@@ -237,11 +198,11 @@ configure.md                                        every env var, and what it d
 
 ## status
 
-it runs, it is tested (1076 tests, no network, no sleeps), and it is honest about what is
+it runs, it is tested (1073 tests, no network, no sleeps), and it is honest about what is
 not done. the runtime does not use every unit above yet: an agent to agent message carries no
 claims and crosses no declared door, so a claim is only checked where a synthesis is written.
 the shell shows ten views over 242 routes, so projects, strikes, claims, crossings and evals
-have an api and no page, and the build log has a row per build but no view of its own. the postgres translation is tested for drift
+have an api and no page. the postgres translation is tested for drift
 rather than against a live server, and `tx()` will need a real advisory lock there. auth is
 one shared token with no user model. and in `get/`, npm and mcp are honest placeholders.
 
