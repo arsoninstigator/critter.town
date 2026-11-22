@@ -755,7 +755,9 @@ async function renderProjects(view, params) {
       row.appendChild(el("button", { class: "warn", text: "kill", onclick: async function () {
         var criteria = project.kill_criteria || [];
         if (!criteria.length) { say("this project declared no kill criteria", true); return; }
-        var criterion = window.prompt("which declared criterion fired?\n\n" + criteria.join("\n"), criteria[0]);
+        // one line, because this string is inside a python triple quote and an escape
+        // here becomes a real newline in the served page, which is a syntax error
+        var criterion = window.prompt("which declared criterion fired? " + criteria.join(" | "), criteria[0]);
         if (!criterion) return;
         var reason = window.prompt("what happened, in a sentence someone can read?");
         if (!reason) return;

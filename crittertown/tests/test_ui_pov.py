@@ -7,6 +7,9 @@ tests do the two things a page needs: it renders, and every route it calls exist
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 from base import AppCase
@@ -98,6 +101,24 @@ class PageShapeTests(unittest.TestCase):
     def test_isolation_is_its_own_page(self):
         self.assertIn("identical_profiles", ISOLATION_PAGE)
         self.assertIn("crews/{team}/isolation", ISOLATION_PAGE)
+
+
+class PageSyntaxTests(unittest.TestCase):
+    """the page is served as one big string, so a python escape becomes a real newline in
+    the javascript. that is a syntax error in a string literal and it breaks the whole
+    shell, which no amount of route checking would catch."""
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed here")
+    def test_the_served_pages_parse_as_javascript(self):
+        for name, page in (("pov", POV_PAGE), ("isolation", ISOLATION_PAGE)):
+            scripts = re.findall(r"<script>(.*?)</script>", page, re.S)
+            self.assertTrue(scripts, f"{name} has no script")
+            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as box:
+                box.write("\n".join(scripts))
+                path = box.name
+            done = subprocess.run(["node", "--check", path], capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0,
+                             f"{name} does not parse: {done.stderr[:400]}")
 
 
 class PageDataTests(AppCase):
