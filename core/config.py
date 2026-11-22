@@ -69,6 +69,16 @@ class Settings:
     # a toolbox entry: an agent calls it, the platform does not run it
     firecrawl_api_key: str = ""
     firecrawl_base_url: str = "https://api.firecrawl.dev/v1"
+    # research engines. two searches rather than one, because one engine's ranking is one
+    # engine's opinion and a source is only worth citing if a second one can find it too.
+    tavily_api_key: str = ""
+    tavily_base_url: str = "https://api.tavily.com"
+    querit_api_key: str = ""
+    querit_base_url: str = "https://api.querit.ai/v1"
+    # apify is a dataset rather than a search: an actor run that answers with rows
+    apify_token: str = ""
+    apify_user_id: str = ""
+    apify_base_url: str = "https://api.apify.com/v2"
 
     # scheduling broker: inproc | schedule
     broker: str = "inproc"
@@ -153,6 +163,13 @@ class Settings:
             dify_user=_env(env, "CRITTERTOWN_DIFY_USER", "crittertown"),
             firecrawl_api_key=_env(env, "CRITTERTOWN_FIRECRAWL_API_KEY"),
             firecrawl_base_url=_env(env, "CRITTERTOWN_FIRECRAWL_BASE_URL", "https://api.firecrawl.dev/v1"),
+            tavily_api_key=_env(env, "CRITTERTOWN_TAVILY_API_KEY"),
+            tavily_base_url=_env(env, "CRITTERTOWN_TAVILY_BASE_URL", "https://api.tavily.com"),
+            querit_api_key=_env(env, "CRITTERTOWN_QUERIT_API_KEY"),
+            querit_base_url=_env(env, "CRITTERTOWN_QUERIT_BASE_URL", "https://api.querit.ai/v1"),
+            apify_token=_env(env, "CRITTERTOWN_APIFY_TOKEN"),
+            apify_user_id=_env(env, "CRITTERTOWN_APIFY_USER_ID"),
+            apify_base_url=_env(env, "CRITTERTOWN_APIFY_BASE_URL", "https://api.apify.com/v2"),
             broker=_env(env, "CRITTERTOWN_BROKER", "inproc").lower(),
             schedule_broker_url=_env(env, "SCHEDULE_BROKER_URL"),
             schedule_worker_queue=_env(env, "SCHEDULE_QUEUE", "crittertown"),
