@@ -30,6 +30,16 @@ the agent org chart and come back with the result. the human is the ubo, the ult
 beneficial owner: hands off, holding the direction, the constraints and the money, and not
 the day to day manager of anything.
 
+the ubo is hands off because the agents hold the operations rather than borrowing a person's
+authority each time they act. the org sits inside a contained legal entity, the way clawbank
+was set up earlier this year: the entity is the thing that can hold an account, sign a
+contract and carry the liability, and the agents run its operations under it. that is what
+corporate personhood buys a dark factory. a worker that has to route every signature through
+a human is a worker with a human in the loop, and the point of the arrangement is that the
+human's role is ownership, not management. the containment is the other half: the entity is
+bounded on purpose, so what the org can reach is a matter of the charter rather than a matter
+of a prompt.
+
 what that asks for, and what is being built here:
 
 - **long horizon.** work outlives a context window, a session and a model. a card is a row,
@@ -44,8 +54,12 @@ what that asks for, and what is being built here:
   and the morning brief carries the numbers that say whether it did
 - **auditable.** every move is a row, the rows are hash chained and signed per agent, and the
   chain exports as a bundle anyone can verify offline
-- **lifecycle.** agents are added, frozen, thawed, duplicated, burned and retired, and none
-  of that is a status field someone edits by hand
+- **the lifecycle belongs to the project.** a project moves through inception, build,
+  assemble, launch, operate and review, and it advances only when its phase is met. review
+  has two exits and both are declared before the work starts: a metric that moved closes it,
+  and a kill criterion that was written down while the sunk cost did not exist yet ends it.
+  the seat is the smaller lifecycle, a live, frozen or burned agent that can be duplicated
+  and retired without touching the work it was holding
 
 ## the name
 

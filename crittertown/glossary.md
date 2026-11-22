@@ -204,6 +204,18 @@ dify.
 
 ## internal vocabulary
 
+### ubo
+the ultimate beneficial owner: the person the org answers to, holding direction, constraints
+and money, and not a node in the org chart. the ubo is not a manager, and the arrangement is
+built so that nobody has to be.
+
+### the entity
+the contained legal entity the org sits inside, the way clawbank was set up earlier this
+year. it is the thing that can hold an account, sign a contract and carry liability, so the
+agents run operations with corporate personhood rather than borrowing a human's signature for
+every act. the containment is the deliberate half: what the org may reach is a matter of the
+charter, not of a prompt.
+
 ### sidecar
 a helper beside a card, not a junior agent below one. a subagent is a principal with a
 lineage its parent signed; a sidecar works inside its parent's run, holds no permission
