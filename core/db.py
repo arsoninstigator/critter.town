@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 SCHEMA = """
 create table if not exists meta (
@@ -975,6 +975,12 @@ def now() -> float:
 
 
 LATER_COLUMNS: dict[str, dict[str, str]] = {
+    # v20: the lifecycle is a loop of scoped builds, so a project carries which build it is
+    # on and the record of the ones that ended. closing v0 is how a business stops at v0.
+    "projects": {
+        "version": "integer not null default 0",
+        "builds": "text not null default '[]'",
+    },
     "teams": {
         "idle_freeze_days": "integer not null default 0",
     },

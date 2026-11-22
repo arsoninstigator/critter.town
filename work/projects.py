@@ -7,6 +7,13 @@ kill criteria declared before the sunk cost exists.
 there is no "call it done" verb, and that is the point. a project moves when the gate for
 its phase is met, and review has two exits: a metric that moved, or killed. a business that
 neither works nor ends is how a month becomes a year.
+
+the lifecycle is not one pass. a project that moved its metric and has a next scope does not
+close, it opens the next build: v0 is the thing that works at all, v1 is the thing that
+survives people using it, and later builds add a revenue stream or a surface. each build is
+scoped before it starts and recorded when it ends, and operation between builds is
+maintenance rather than a phase, because a project that only moves when it is being built is
+a project that rots the moment the build ends.
 """
 
 from __future__ import annotations
@@ -135,6 +142,13 @@ def evaluate(project: dict, facts: dict) -> list[dict]:
         moved = facts.get("metric_moved")
         checks.append(_pass("verdict_reachable", got=moved) if moved is not None
                       else _fail("verdict_reachable", got=None))
+        nxt = facts.get("next_build")
+        if nxt is not None:
+            # "v2" is not a scope. a build that is not named is a build nobody can review,
+            # and the whole point of the loop is that each turn around it is reviewable
+            scope = str((nxt or {}).get("scope", "")).strip() if isinstance(nxt, dict) else ""
+            checks.append(_pass("next_build_is_scoped", scope=scope) if len(scope) > 12
+                          else _fail("next_build_is_scoped", scope=scope))
     return checks
 
 
@@ -148,11 +162,27 @@ NEXT = {
 
 
 def next_phase(project: dict, facts: dict) -> str:
-    """review is the only phase with two exits, and the deciding evidence is a number that
-    moved, not an opinion about how it went."""
+    """review is the only phase with a choice, and the deciding evidence is a number that
+    moved, not an opinion about how it went. a build that moved its metric and declared the
+    next scope goes back to build with a new version rather than closing, because growth is a
+    sequence of scoped builds and closing v0 is how a business stops at v0."""
     if project["phase"] == "review":
+        if facts.get("metric_moved") is True and isinstance(facts.get("next_build"), dict):
+            return "build"
         return "closed" if facts.get("metric_moved") is True else "killed"
     return NEXT.get(project["phase"], project["phase"])
+
+
+def build_record(project: dict, facts: dict, at: float) -> dict:
+    """one row per build that ended: which version, why it ended, and what it moved."""
+    return {
+        "version": int(project.get("version") or 0),
+        "ended_at": at,
+        "verdict": "moved" if facts.get("metric_moved") is True else "did_not_move",
+        "metric": facts.get("metric_name") or project.get("objective_ref") or "",
+        "reason": str((facts.get("next_build") or {}).get("reason", ""))[:500]
+                  if isinstance(facts.get("next_build"), dict) else "",
+    }
 
 
 def advance(project: dict, facts: dict) -> dict:
@@ -162,7 +192,12 @@ def advance(project: dict, facts: dict) -> dict:
     unmet = [c for c in checks if not c["ok"]]
     if unmet:
         return {"ok": False, "reason": "gate_unmet", "unmet": unmet, "checks": checks}
-    return {"ok": True, "reason": "", "phase": next_phase(project, facts), "checks": checks}
+    phase = next_phase(project, facts)
+    build = build_record(project, facts, at=float(facts.get("now") or now())) \
+        if project["phase"] == "review" else None
+    version = int(project.get("version") or 0) + (1 if phase == "build" else 0)
+    return {"ok": True, "reason": "", "phase": phase, "version": version,
+            "build": build, "checks": checks}
 
 
 def kill(project: dict, criterion: str, reason: str) -> dict:
@@ -199,6 +234,8 @@ class ProjectService:
             "min_margin_pct": row["min_margin_pct"],
             "kill_criteria": loads(row["kill_criteria"], []),
             "closed_reason": row["closed_reason"],
+            "version": int(row["version"] or 0) if "version" in row.keys() else 0,
+            "builds": loads(row["builds"], []) if "builds" in row.keys() else [],
             "created_date": row["created_date"],
             "updated_date": row["updated_date"],
         }
@@ -214,6 +251,7 @@ class ProjectService:
             "slices": list(slices or []), "unit_cost_ceiling_cents": unit_cost_ceiling_cents,
             "unit_price_cents": unit_price_cents, "min_margin_pct": min_margin_pct,
             "kill_criteria": list(kill_criteria or []), "closed_reason": "",
+            "version": 0, "builds": [],
         }
         faults = validate(project)
         if faults:
@@ -286,9 +324,14 @@ class ProjectService:
         if not outcome["ok"]:
             return {**outcome, "project": project}
         ts = now()
+        builds = list(project.get("builds") or [])
+        if outcome.get("build"):
+            builds.append(outcome["build"])
         with self.store.tx() as c:
-            c.execute("update projects set phase = ?, phase_started_at = ?, updated_date = ? where id = ?",
-                      (outcome["phase"], ts, ts, project_id))
+            c.execute("""update projects set phase = ?, phase_started_at = ?, version = ?,
+                         builds = ?, updated_date = ? where id = ?""",
+                      (outcome["phase"], ts, outcome.get("version", project.get("version") or 0),
+                       dumps(builds), ts, project_id))
         return {**outcome, "project": self.get(project_id)}
 
     def kill(self, project_id: str, criterion: str, reason: str) -> dict:

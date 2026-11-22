@@ -395,3 +395,25 @@ a recovery card that goes silent files nothing. a cascade is how a watchdog beco
 outage. the same rule covers a card that is blocked, whose silence is the durable waiting
 signal the column already carries, and a card that reached done with evidence newer than the
 silence, which is late rather than stuck.
+
+## the lifecycle is a loop of scoped builds, and operation is maintenance
+
+the project had one pass: inception, build, assemble, launch, operate, review, then closed or
+killed. that is the lifecycle of a launch, not of a business. a thing that works at all is v0.
+a thing that survives people using it is v1. a thing that adds a market, a surface or another
+revenue stream is v2 and after. none of those are the same project ending and a new one
+starting, and treating them that way makes the review that should have opened the next build
+look like the death of the last one.
+
+so review has a third exit. a moved metric with a named next scope returns the project to
+build with `version` incremented, and the build that just ended is appended to `builds` with
+its version, its verdict, the metric it was measured on and the reason the next one exists. a
+next build needs both halves: a moved metric, because growth on a basis that did not hold is a
+killed project wearing a version number, and a scope longer than a label, because "v2" is not
+something anyone can review.
+
+what sits between builds is operation, and operation is maintenance rather than a phase that
+ends. the routines keep firing, the metric keeps being sampled daily, and the operate gate
+already refuses to move a project that has not held a month of that. a project that only moves
+while somebody is building it is a project that rots the moment the build ends, which is why
+the cadence lives in routines and the samples are a gate rather than a dashboard.

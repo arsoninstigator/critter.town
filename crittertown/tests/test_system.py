@@ -79,13 +79,36 @@ class ProjectTests(unittest.TestCase):
                                      "guardrail_refusals": 0})
         self.assertFalse([c for c in ok if not c["ok"]])
 
-    def test_review_has_two_exits_and_no_third(self):
+    def test_review_closes_kills_or_opens_the_next_build(self):
         review = project(phase="review")
         clean = {"readings_disagree": [], "open_audit_alerts": 0}
         self.assertEqual(proj.advance(review, {**clean, "metric_moved": True})["phase"], "closed")
         self.assertEqual(proj.advance(review, {**clean, "metric_moved": False})["phase"], "killed")
         # a review with no verdict is not a third exit, it is a gate that has not opened
         self.assertEqual(proj.advance(review, clean)["reason"], "gate_unmet")
+
+    def test_a_moved_metric_with_a_next_scope_opens_the_next_build(self):
+        review = project(phase="review", version=0)
+        clean = {"readings_disagree": [], "open_audit_alerts": 0, "metric_moved": True}
+        nxt = {"scope": "the first hundred people who sign up without being asked",
+               "reason": "v0 works for the people we handed it to"}
+        out = proj.advance(review, {**clean, "next_build": nxt})
+        self.assertEqual(out["phase"], "build")
+        self.assertEqual(out["version"], 1)
+        self.assertEqual(out["build"]["version"], 0)
+        self.assertEqual(out["build"]["verdict"], "moved")
+
+    def test_a_next_build_needs_a_moved_metric_and_a_named_scope(self):
+        review = project(phase="review")
+        nxt = {"scope": "the first hundred people who sign up without being asked"}
+        # growth on a basis that did not hold is a killed project wearing a version number
+        self.assertEqual(proj.advance(review, {"readings_disagree": [], "open_audit_alerts": 0,
+                                               "metric_moved": False,
+                                               "next_build": nxt})["phase"], "killed")
+        thin = proj.advance(review, {"readings_disagree": [], "open_audit_alerts": 0,
+                                     "metric_moved": True, "next_build": {"scope": "v2"}})
+        self.assertEqual(thin["reason"], "gate_unmet")
+        self.assertIn("next_build_is_scoped", {c["id"] for c in thin["unmet"]})
 
     def test_a_kill_needs_a_declared_criterion(self):
         with self.assertRaises(ValidationError):
@@ -230,6 +253,33 @@ class SystemServiceTests(AppCase):
         killed = self.app.projects.kill(row["id"], "unit cost stays above the ceiling for a week",
                                         "quotes never came under the ceiling")
         self.assertEqual(killed["phase"], "killed")
+
+    def test_the_version_and_the_build_log_are_rows(self):
+        team = self.crew("growth")
+        row = self.app.projects.create(
+            team["id"], "sell the recipe",
+            [{"slice": "recipe", "objective_ref": "obj1"}], 900,
+            ["unit cost stays above the ceiling for a week"], objective_ref="obj1",
+            unit_price_cents=1500, min_margin_pct=0.3)
+        self.assertEqual(row["version"], 0)
+        # straight to review, because the gates in between are the other tests' business
+        with self.app.store.tx() as c:
+            c.execute("update projects set phase = 'review' where id = ?", (row["id"],))
+        clean = {"readings_disagree": [], "open_audit_alerts": 0, "metric_moved": True}
+        opened = self.app.projects.advance(row["id"], {**clean, "next_build": {
+            "scope": "a second revenue stream from catering the same recipe"}})
+        self.assertEqual(opened["project"]["phase"], "build")
+        self.assertEqual(opened["project"]["version"], 1)
+        self.assertEqual(len(opened["project"]["builds"]), 1)
+        self.assertEqual(opened["project"]["builds"][0]["version"], 0)
+        # the next review closes it, and the log keeps both builds
+        with self.app.store.tx() as c:
+            c.execute("update projects set phase = 'review' where id = ?", (row["id"],))
+        closed = self.app.projects.advance(row["id"], clean)
+        self.assertEqual(closed["project"]["phase"], "closed")
+        self.assertEqual(closed["project"]["version"], 1)
+        self.assertEqual([b["version"] for b in closed["project"]["builds"]], [0, 1])
+        self.assertEqual(closed["project"]["builds"][1]["verdict"], "moved")
 
     def test_a_message_with_a_bad_claim_writes_nothing(self):
         team = self.crew("claims")
