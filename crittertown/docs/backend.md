@@ -285,6 +285,15 @@ projects, claims, strikes, crossings:
 - `GET /agents/{id}/standing`, `POST /crews/{id}/strikes`, `POST /crews/{id}/strikes/{agent}/clear`
 - `POST /crews/{id}/crossings`, `GET /crews/{id}/crossings`, `POST /crews/{id}/crossings/authorize`, `POST /crossings/{id}/revoke`
 
+`POST /a2a` is the one write that can cross a crew boundary. when the recipient belongs to
+another crew the message is authorized against a declared crossing, using the envelope kind
+the message kind maps to (`note` finding, `handoff` proposal, `request` and `review_request`
+request, `result` receipt, `blocker` signal), and the size and rate are checked before the row
+is written. a refusal is a `NotAllowed` carrying the wall's reason (`no_crossing`,
+`kind_not_allowed`, `crossing_expired`, `crossing_disabled`, `too_large`, `rate_limited`). the
+row records `to_team_id`, `crossing_id` and `envelope_kind`; a message inside the crew leaves
+all three empty.
+
 `POST /tasks/{id}/breakdown` takes `parts` (title, slice, surface, budget_cents,
 assignee_agent_id), an optional `join`, and an optional `project_id`. the join defaults to
 the card's shape; a looser join is refused.

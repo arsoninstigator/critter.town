@@ -9,6 +9,11 @@ agent's run. that is the difference between reviewable and reviewed-after-the-fa
 
 message kinds are a small closed set so the log stays queryable:
   note | handoff | request | result | blocker | review_request
+
+a message inside a crew needs nothing but the review gate. a message that leaves the crew
+crosses a wall, so it needs a declared crossing: a direction, an envelope kind, a rate and an
+expiry, checked before the row is written. the row keeps the door it used, because "which
+door did this cross" is the question an audit asks and the answer cannot be inferred later.
 """
 
 from __future__ import annotations
@@ -19,12 +24,26 @@ from core.errors import NotFound, NotAllowed, ValidationError
 KINDS = {"note", "handoff", "request", "result", "blocker", "review_request"}
 DECISIONS = {"approved", "rejected"}
 
+# what a message becomes when it leaves the crew. the envelope vocabulary is the crossing
+# vocabulary, because a door that lets "messages" through lets everything through.
+ENVELOPE_KIND = {
+    "note": "finding",
+    "handoff": "proposal",
+    "request": "request",
+    "result": "receipt",
+    "blocker": "signal",
+    "review_request": "request",
+}
+
 
 class A2AService:
     def __init__(self, store: Store):
         self.store = store
         # set by the composition root to `triggers.fire`
         self.events_hook = None
+        # set by the composition root: a message to another crew is a crossing, and a
+        # crossing is authorized, sized and rate limited before anything is written
+        self.crossings = None
 
     # ---- send ----------------------------------------------------------
     def send(
@@ -44,14 +63,28 @@ class A2AService:
         team = self.store.one("select * from teams where id = ?", (team_id,))
         if not team:
             raise NotFound(f"crew {team_id} not found")
-        for agent_id, label in ((from_agent_id, "sender"), (to_agent_id, "recipient")):
-            if not agent_id:
-                continue
-            row = self.store.one("select team_id from agents where id = ?", (agent_id,))
-            if not row:
-                raise NotFound(f"{label} agent {agent_id} not found")
-            if row["team_id"] != team_id:
-                raise NotAllowed(f"{label} agent belongs to a different crew")
+        sender = self.store.one("select team_id from agents where id = ?", (from_agent_id,))
+        if not sender:
+            raise NotFound(f"sender agent {from_agent_id} not found")
+        if sender["team_id"] != team_id:
+            raise NotAllowed("the sending agent belongs to a different crew")
+        to_team_id = ""
+        if to_agent_id:
+            recipient = self.store.one("select team_id from agents where id = ?", (to_agent_id,))
+            if not recipient:
+                raise NotFound(f"recipient agent {to_agent_id} not found")
+            to_team_id = recipient["team_id"] or ""
+        if to_team_id == team_id:
+            # the row says where the message went, so a message inside the crew went
+            # nowhere: an empty to_team_id is the honest value and it is what the log reads
+            to_team_id = ""
+
+        # a message that leaves the crew crosses a wall, and the wall decides
+        crossing_id = ""
+        envelope_kind = ""
+        if to_team_id:
+            envelope_kind = ENVELOPE_KIND[kind]
+            crossing_id = self._cross(team_id, to_team_id, envelope_kind, body)
 
         requires_review = team["review_mode"] == "reviewed"
         message_id = new_id("msg")
@@ -60,17 +93,37 @@ class A2AService:
         with self.store.tx() as c:
             c.execute(
                 """insert into a2a_messages
-                   (id, team_id, task_id, from_agent_id, to_agent_id, kind, body, status,
-                    thread_id, created_date, reviewed_date)
-                   values (?,?,?,?,?,?,?,?,?,?,?)""",
+                   (id, team_id, task_id, from_agent_id, to_agent_id, to_team_id, kind,
+                    envelope_kind, crossing_id, body, status, thread_id, created_date,
+                    reviewed_date)
+                   values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    message_id, team_id, task_id, from_agent_id, to_agent_id, kind, body,
-                    status, thread, now(), None if requires_review else now(),
+                    message_id, team_id, task_id, from_agent_id, to_agent_id, to_team_id,
+                    kind, envelope_kind, crossing_id, body, status, thread, now(),
+                    None if requires_review else now(),
                 ),
             )
         message = self.get(message_id)
         self._emit(team_id, message_id, message=message)
         return message
+
+    def _cross(self, team_id: str, to_team_id: str, envelope_kind: str, body: str) -> str:
+        """authorize the door, or refuse with the reason the wall gave.
+
+        the default is deny, so an undeclared pair refuses rather than defaulting to open.
+        a refusal names the reason the crossing layer produced, because "not allowed" is
+        not something a person can fix and "crossing_not_declared" is.
+        """
+        if self.crossings is None:
+            raise NotAllowed("a message that leaves the crew needs a declared crossing",
+                             reason="crossing_not_declared", to_team_id=to_team_id)
+        outcome = self.crossings.authorize(team_id, team_id, to_team_id, envelope_kind,
+                                           size_bytes=len(body.encode("utf-8")))
+        if not outcome["ok"]:
+            raise NotAllowed(f"the crossing refused this message: {outcome['reason']}",
+                             reason=outcome["reason"], to_team_id=to_team_id,
+                             envelope_kind=envelope_kind)
+        return outcome["crossing"]["id"]
 
     def _emit(self, team_id: str, message_id: str, **extra) -> None:
         if self.events_hook:
@@ -181,6 +234,10 @@ class A2AService:
             "task_id": row["task_id"],
             "from_agent_id": row["from_agent_id"],
             "to_agent_id": row["to_agent_id"],
+            # empty means the message stayed inside the crew and crossed nothing
+            "to_team_id": row["to_team_id"] if "to_team_id" in row.keys() else "",
+            "crossing_id": row["crossing_id"] if "crossing_id" in row.keys() else "",
+            "envelope_kind": row["envelope_kind"] if "envelope_kind" in row.keys() else "",
             "kind": row["kind"],
             "body": row["body"],
             "status": row["status"],

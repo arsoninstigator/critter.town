@@ -417,3 +417,23 @@ ends. the routines keep firing, the metric keeps being sampled daily, and the op
 already refuses to move a project that has not held a month of that. a project that only moves
 while somebody is building it is a project that rots the moment the build ends, which is why
 the cadence lives in routines and the samples are a gate rather than a dashboard.
+
+## a message that leaves the crew is a crossing
+
+a2a had one rule about crews: a sender and a recipient in different crews was refused outright.
+that is safe and useless, because two crews working on one thing have to talk, and the only
+alternatives were a shared crew (no wall) or a person relaying (a person in the loop).
+
+so the wall decides instead of the message layer. when the recipient belongs to another crew,
+the message is mapped to the crossing envelope vocabulary (`note` is a finding, `handoff` a
+proposal, `result` a receipt, `blocker` a signal, the two request kinds are requests) and
+authorized against a declared crossing: direction, kind, size, rate, expiry. the default is
+still deny, so an undeclared pair refuses with the wall's own reason rather than a generic
+"not allowed", which is the difference between a refusal someone can fix and one they cannot.
+
+three details are deliberate. the size and the rate are checked before the row is written, so a
+refused message leaves nothing to clean up and nothing to explain later. the row keeps
+`to_team_id`, `crossing_id` and `envelope_kind`, because "which door did this cross" is the
+question an audit asks and it cannot be inferred once the door has expired. and a message
+inside the crew stores all three empty, because a message that went nowhere should not look
+like it went somewhere.

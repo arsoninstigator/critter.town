@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 SCHEMA = """
 create table if not exists meta (
@@ -1014,6 +1014,13 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
     },
     # which side wrote the row: the app, or the signed log behind it
     "channel_messages": {"via": "text not null default 'app'"},
+    # v21: a message that leaves the crew crossed a declared door, and the row says which
+    # one. an empty to_team_id is a message inside the crew, which needs no door.
+    "a2a_messages": {
+        "to_team_id": "text not null default ''",
+        "crossing_id": "text not null default ''",
+        "envelope_kind": "text not null default ''",
+    },
     # immutable public handle: alphanumeric, generated once, never updated
     "agents": {
         "agent_key": "text",

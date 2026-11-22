@@ -263,6 +263,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     claims = ClaimService(store, crews=crews)
     strikes = StrikeService(store, crews=crews)
     crossings = CrossingService(store, crews=crews)
+    # a message to another crew is a crossing, so the wall is on the a2a path too
+    a2a.crossings = crossings
     runner.strikes = strikes
     # a breakdown reads the project's slices, the parts' budget, a frozen seat and a door
     # out of the crew, so the same services answer it as answer dispatch

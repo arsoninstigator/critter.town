@@ -290,7 +290,10 @@ looking, and burn has no inverse. the point is that "why is this seat frozen" is
 ### crossing
 a declared door between two crews: direction, envelope kinds, a rate, a size, an expiry.
 the default is deny, the narrower door wins when two match, the rate is a token bucket that
-refills continuously, and revoking is `drain` (what is in flight lands) or `cut`.
+refills continuously, and revoking is `drain` (what is in flight lands) or `cut`. an a2a
+message addressed to another crew is a crossing, so it is authorized, sized and rate limited
+before its row exists, and the row keeps the door it used. a message inside the crew crosses
+nothing and carries an empty `to_team_id`.
 
 ### topology
 which shape the work needs, decided from signals the card declares: is the question known
