@@ -185,6 +185,21 @@ agent. `problems` are structural (a gated shape in a one-agent crew, a seat with
 left) and `gaps` are staffing. the runner passes a seat role into `context.compose`, which
 intersects the role's entitlement with the agent's enabled slices.
 
+### the heartbeat: an agent we do not run
+
+`POST /agents/{id}/heartbeat` with `{key, ttl_seconds}` is how a worker built somewhere else asks
+for work. it answers with the card it now holds (the payload, the capability the card was addressed
+by, and the evidence scheme that will close it) or with `{ok: false, why: "nothing_ready"}`. beating
+while already holding renews instead of double dispatching.
+
+the refusals are the design: `not_external` keeps the route from becoming a second way to claim
+work for an agent the platform drives, `key_mismatch` because a beat carries the worker's own key,
+and `seat_not_live` for a frozen or burned seat, refused before the work is described. an external
+worker may hold doer, sampler and researcher seats and may never review or integrate, so the
+roster will not seat one in a judging seat and `POST /tasks/{id}/approve` refuses it with
+`external_agent_cannot_review`. `GET /agents/{id}/heartbeat` reads back what it may do, when it
+last asked and what it is holding.
+
 ### custody: who holds a card
 
 - `GET /tasks/{id}/custody` returns the holder, the lease expiry, the attempt count and

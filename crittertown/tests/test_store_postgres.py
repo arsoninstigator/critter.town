@@ -116,7 +116,8 @@ class InitTests(unittest.TestCase):
         self.assertFalse([a for a in alters if a.startswith("alter table tasks")])
         agent_alters = [a for a in alters if a.startswith("alter table agents")]
         self.assertTrue(agent_alters)
-        self.assertIn("add column if not exists agent_key", agent_alters[0])
+        # order inside the column map is not the contract; reaching every column is
+        self.assertTrue(any("add column if not exists agent_key" in a for a in agent_alters))
         self.assertFalse([a for a in alters if a.startswith("alter table workflows")],
                          "a table the catalogue does not report must not be altered")
 

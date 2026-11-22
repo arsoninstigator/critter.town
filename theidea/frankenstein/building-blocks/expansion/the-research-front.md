@@ -81,8 +81,9 @@ in the same audit chain. the shape:
 
 - an agent row with `runtime = "external"`, a token scoped to exactly four calls: heartbeat,
   claim, renew, complete
-- `POST /agents/{id}/heartbeat` answers with the next claimable card or `204`, and the answer
-  carries the payload, the slice snapshot and the evidence scheme the card expects
+- `POST /agents/{id}/heartbeat` answers with the next claimable card or `{ok: false, why:
+  "nothing_ready"}`, and the answer carries the payload, the capability and the evidence scheme
+  the card expects
 - refusals that matter: an external agent may not review, may not integrate, may not hold a2a
   custody, and may not be dispatched a card whose kind it cannot satisfy. those are the same
   `may_fill` rules archetypes already applies, so nothing new is invented

@@ -57,6 +57,7 @@ from work.delegation import DelegationService
 from work.budget import BudgetService
 from work.dispatch import DispatchService
 from work.replenish import ReplenishService
+from work.heartbeat import HeartbeatService
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -116,6 +117,8 @@ class App:
     dispatch: DispatchService
     replenish: ReplenishService
     silence: SilenceService
+    # a worker we do not run asks here for work, and the answer is a card or a reason
+    heartbeat: HeartbeatService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -265,6 +268,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     crossings = CrossingService(store, crews=crews)
     # a message to another crew is a crossing, so the wall is on the a2a path too
     a2a.crossings = crossings
+    # an external agent is hired by one call: it beats, and the answer is a card or a reason
+    heartbeat = HeartbeatService(store, crews=crews, custody=custody, strikes=strikes)
     runner.strikes = strikes
     # a breakdown reads the project's slices, the parts' budget, a frozen seat and a door
     # out of the crew, so the same services answer it as answer dispatch
@@ -403,6 +408,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         dispatch=dispatch,
         replenish=replenish,
         silence=silence,
+        heartbeat=heartbeat,
         polls=polls,
         browsers=browsers,
         ops=ops,

@@ -357,6 +357,31 @@ calls itself, whenever it decides to: the browser, the sandbox, workflows for a 
 board. the difference is who decides the order. a workflow decides for a node; the agent
 decides for a service.
 
+### external worker
+
+an agent this platform does not run. the model, the harness and the tools live somewhere else,
+and the worker asks for work instead of being dispatched it: it beats, and the answer is either a
+card it now holds or a reason there is nothing for it. hiring one is the same call as hiring a
+local agent, with `hosting` set to `external`, because the difference is who runs the model and
+not what the agent is.
+
+the boundary is a rule rather than a convention. an external worker may hold doer, sampler and
+researcher seats, and may never review or integrate: a reviewer is asked to judge evidence it did
+not produce and cannot inspect. it gets everything else a local worker gets, which is the point of
+hiring it this way: a lease that expires, a silence watchdog, strikes that freeze the seat, and a
+budget reservation. nothing enters this process, so the audit chain has no hole in it.
+
+### heartbeat
+
+the call an external worker makes to ask for work. it carries the worker's own key, so a beat
+cannot be spent on somebody else's seat, and it answers with the card, the lease, the capability
+the card was addressed by, and the evidence scheme the card will be closed with. `done` is not a
+guess for a worker that never saw this repo's rules.
+
+beating while already holding a card renews instead of handing out a second one: a worker that has
+not reported on the first is not ready for the next. a frozen or burned seat is refused before the
+work is looked at, because a worker that may not work should not be told what the work is.
+
 ### the four roots
 the tree has four roots for things that came from outside, and the difference between them
 is who owns the thing, not how big it is.

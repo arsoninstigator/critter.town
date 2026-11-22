@@ -18,7 +18,7 @@ from core.db import Store, dumps, loads, new_id, now
 # to remember they exist.
 CLAIM_WINDOW_SECONDS = 900.0
 LEASE_SECONDS = 300.0
-from core.errors import NotFound, ValidationError
+from core.errors import NotAllowed, NotFound, ValidationError
 from work import convergence
 from work.evidence import KINDS, evidence_fits, expected
 
@@ -262,6 +262,7 @@ class KanbanService:
         better one.
         """
         task = self.get_task(task_id)
+        self._must_be_a_reviewer(task, actor)
         reference = self._evidence_for(task, evidence)
         self._check_barrier(task_id)
         if task["column"] == "in_progress":
@@ -269,6 +270,21 @@ class KanbanService:
         if task["column"] != "done":
             task = self.move(task_id, "done", actor, note=note, evidence=reference)
         return task
+
+    def _must_be_a_reviewer(self, task: dict, actor: str) -> None:
+        """the reviewer has to be someone who can be wrong about this card. the assignee rule
+        is enforced in `move`, where every path passes; this one is the other half: a worker
+        the platform does not run cannot sign a card off, because a reviewer is asked to
+        judge evidence it did not produce and cannot inspect."""
+        if not actor:
+            return
+        row = self.store.one("select hosting from agents where id = ?", (actor,))
+        if not row:
+            return
+        if (row["hosting"] if "hosting" in row.keys() else "local") == "external":
+            raise NotAllowed("an external agent cannot review a card",
+                             task_id=task["id"], why="external_agent_cannot_review",
+                             agent_id=actor)
 
     def _evidence_for(self, task: dict, evidence: str = "") -> str:
         """the reference that closes this card, or a refusal that says what it wanted."""

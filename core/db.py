@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 SCHEMA = """
 create table if not exists meta (
@@ -1014,6 +1014,9 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
     },
     # which side wrote the row: the app, or the signed log behind it
     "channel_messages": {"via": "text not null default 'app'"},
+    # v22: an agent we do not run. `hosting` is who runs the model, not what the model is:
+    # local means this platform drives it, external means something else does and it polls
+    # for work. an external worker may hold cards and may never judge one.
     # v21: a message that leaves the crew crossed a declared door, and the row says which
     # one. an empty to_team_id is a message inside the crew, which needs no door.
     "a2a_messages": {
@@ -1023,6 +1026,12 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
     },
     # immutable public handle: alphanumeric, generated once, never updated
     "agents": {
+        # v22: an agent we do not run. `hosting` is who runs the model, not what the model
+        # is: local means this platform drives it, external means something else does and it
+        # polls for work. a duplicate key in this dict literal silently wins, so these live
+        # in the one agents block rather than a second one.
+        "hosting": "text not null default 'local'",
+        "heartbeat_at": "real not null default 0",
         "agent_key": "text",
         "scope": "text not null default '{}'",
         # the principal: bech32 of sha256(pubkey). set once, signed, never moved

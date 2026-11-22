@@ -21,7 +21,7 @@ from __future__ import annotations
 from agents.context import SLICES
 from core.errors import ValidationError
 from work import topology
-from agents import archetypes
+from agents import archetypes, external
 
 # role -> the slices that role is entitled to. absence is a decision: a reviewer is not
 # entitled to `lessons` (the doer's own teaching) or `inbox` (other people's requests).
@@ -144,6 +144,8 @@ def _pick(agents: list[dict], role: str, taken: list[str]) -> dict | None:
     # a kind that cannot fill this seat is not a candidate, whatever its skills say
     allowed = [a for a in free if archetypes.may_fill(a.get("kind") or "general", role)[0]]
     free = allowed
+    # and a worker we do not run may hold work but may not judge it
+    free = [a for a in free if external.may_hold(a, role)["ok"]]
     for agent in free:
         if str(agent.get("role", "")).lower() == role:
             return agent

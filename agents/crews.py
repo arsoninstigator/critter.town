@@ -9,6 +9,8 @@ agent can write to it, with authorship recorded.
 
 from __future__ import annotations
 
+import sqlite3
+
 import re
 from typing import Any
 
@@ -187,6 +189,7 @@ class CrewService:
         verticals: list[str] | None = None,
         persistence: str | None = None,
         kind: str = "general",
+        hosting: str = "local",
     ) -> dict:
         self.get_team(team_id)
         # a kind caps the seats an agent may fill and the slices it may read, so it is
@@ -194,6 +197,10 @@ class CrewService:
         from agents import archetypes
 
         kind = archetypes.validate(kind)
+        # who runs the model is a hiring decision, so it is checked where the agent is made
+        from agents import external
+
+        hosting = external.validate(hosting)
         persistence = persistence or (runtime or {}).get("persistence") or "workspace"
         if persistence not in PERSISTENCE_MODES:
             raise ValidationError(f"persistence must be one of {list(PERSISTENCE_MODES)}")
@@ -224,13 +231,14 @@ class CrewService:
                 c.execute(
                     """insert into agents
                        (id, team_id, name, role, model, system_prompt, skills, tools, runtime, status,
-                        agent_key, scope, specializations, verticals, kind, created_date,
-                        updated_date)
-                       values (?,?,?,?,?,?,?,?,?,'idle',?,?,?,?,?,?,?)""",
+                        agent_key, scope, specializations, verticals, kind, hosting,
+                        created_date, updated_date)
+                       values (?,?,?,?,?,?,?,?,?,'idle',?,?,?,?,?,?,?,?)""",
                     (
                         agent_id, team_id, name, role, model, system_prompt,
                         dumps(skills or []), dumps(tools or []), dumps(rt),
-                        agent_key, dumps(agent_scope), dumps(specs), dumps(verts), kind, ts, ts,
+                        agent_key, dumps(agent_scope), dumps(specs), dumps(verts), kind,
+                        hosting, ts, ts,
                     ),
                 )
                 c.execute(
@@ -244,7 +252,9 @@ class CrewService:
                            values (?,?,?,'member',?)""",
                         (agent_id, extra, role, ts),
                     )
-            except Exception as exc:
+            except sqlite3.IntegrityError as exc:
+                # only a uniqueness violation means the name is taken. every other insert
+                # failure was being reported as a duplicate agent, which hides the real bug
                 raise Conflict(f"agent '{name}' already exists in this crew") from exc
         self.mint_identity(agent_id)
         if self.profile is not None:
@@ -451,6 +461,9 @@ class CrewService:
             "tools": loads(row["tools"], []),
             "runtime": loads(row["runtime"], {}),
             "status": row["status"],
+            # who runs the model. local is this platform; external is a worker that polls
+            "hosting": row["hosting"] if "hosting" in row.keys() else "local",
+            "heartbeat_at": (row["heartbeat_at"] if "heartbeat_at" in row.keys() else 0) or 0,
             "agent_key": row["agent_key"] if "agent_key" in row.keys() else "",
             "agentid": row["agentid"] if "agentid" in row.keys() else "",
             "scope": (

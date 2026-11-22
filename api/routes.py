@@ -160,6 +160,9 @@ def create_api(app: App | None = None) -> FastAPI:
             specializations=data.get("specializations") or [],
             verticals=data.get("verticals") or [],
             persistence=data.get("persistence"),
+            kind=data.get("kind") or "general",
+            # hiring a worker we do not run is the same call as hiring one we do
+            hosting=data.get("hosting") or "local",
         )
 
     @api.get("/crews/{team_id}/agents")
@@ -282,6 +285,20 @@ def create_api(app: App | None = None) -> FastAPI:
         if not computer:
             raise ValidationError("this agent has no computer provisioned yet")
         return computer
+
+    # ---- external agents ------------------------------------------------
+    # a worker the platform does not run: it beats, and the answer is a card it now holds
+    # or a reason there is nothing for it. the key is the agent's own, so a heartbeat cannot
+    # be spent on somebody else's seat.
+    @api.get("/agents/{agent_id}/heartbeat")
+    def heartbeat_state(agent_id: str) -> dict:
+        return app.heartbeat.state(agent_id)
+
+    @api.post("/agents/{agent_id}/heartbeat")
+    def heartbeat(agent_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        ttl = float(data.get("ttl_seconds") or 900)
+        return app.heartbeat.beat(agent_id, key=str(data.get("key", "")), ttl=ttl)
 
     @api.get("/agents/{agent_id}/inbox")
     def inbox(agent_id: str, limit: int = Query(50, ge=1, le=200)) -> dict:

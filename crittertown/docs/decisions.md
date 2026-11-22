@@ -455,3 +455,37 @@ since a cleared row with no name on it is a shrug.
 one route was missing rather than one page: standing was per agent, so a crew view would have
 been n calls. `GET /crews/{id}/strikes` answers for every seat in one read, and names the
 frozen and burned lists so a page does not have to re-derive the rule from the counts.
+
+## the door a foreign agent knocks on
+
+**decided.** an agent built somewhere else is hired by a heartbeat, not by an adapter.
+
+the field offers two ways in. an adapter, the way crewai's bring-your-own-agent does it, buys real
+fidelity and costs a compatibility class per framework per version, plus that framework's
+dependencies inside this process. a heartbeat costs one route and keeps the foreign worker outside
+the process entirely: it asks for a card, holds it under the same lease, reports output through the
+same route, and completes with the same evidence. paperclip's version of the rule is that if
+something can receive a heartbeat it can be hired, and the reason to prefer it here is that the
+audit chain stays whole: every action a foreign worker takes is still a row.
+
+so `hosting` is a column, not a feature. `external` means something else runs the model and polls;
+`local` means the platform drives it and the tick dispatches it. the same create-agent call hires
+both, because the difference is who runs the model, not what the agent is.
+
+the boundary is written in `agents/external.py` as a rule: an external worker may hold doer,
+sampler and researcher seats, and may never review or integrate. the refusal is not distrust of
+the worker, it is the same rule the review gate already applies to the assignee: a reviewer has to
+be someone who can be wrong about this card. a worker whose turn we cannot see cannot sign one
+off, and the roster will not seat it in a judging seat in the first place, so the refusal arrives
+before the work rather than after it.
+
+the heartbeat answers with more than an id. it carries the lease, the capability the card was
+addressed by, and the evidence scheme that will close the card, because a worker that never read
+this repo's rules should not have to guess what "done" means. beating while holding renews rather
+than double dispatching, and a frozen or burned seat is refused before the work is described: a
+worker that may not work should not be told what the work is.
+
+one wart was fixed on the way through. `add_agent` reported every insert failure as "agent already
+exists", which turned a missing column into a duplicate name and cost a debugging round. it now
+catches only an integrity violation, because an error that lies about its cause is worse than one
+that is vague.
