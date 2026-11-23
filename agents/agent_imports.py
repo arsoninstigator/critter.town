@@ -28,12 +28,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
 from core.errors import NotFound, ValidationError
+from manage.guardrails import SECRET_SHAPES
+from work import skills as skill_specs
 
 SOURCE_CLAUDE_CODE = "claude-code"
 SOURCE_OPENCLAW = "openclaw"
@@ -50,6 +53,25 @@ AGENT_SOURCES = {
     SOURCE_OPENAI: "an assistants style json object",
     SOURCE_CRITTERTOWN: "a crittertown agent manifest, which is also what export writes",
 }
+
+# what a foreign tool name means here. anything not on this list stays unmapped: an
+# imported agent must not arrive holding a permission nobody chose.
+TOOL_MAP = {
+    "shell": "shell", "bash": "shell", "exec": "shell", "terminal": "shell",
+    "powershell": "shell", "cmd": "shell", "run": "shell",
+    "http": "http", "web": "http", "fetch": "http", "curl": "http",
+    "browser": "browser", "playwright": "browser",
+    "read": "files", "write": "files", "edit": "files", "files": "files",
+    "search": "search", "grep": "search", "websearch": "search",
+    "memory": "memory", "notes": "memory",
+}
+
+# a file that only ever meant "here is a schedule" is not instructions, and not
+# knowledge either: a cadence is a crew decision.
+SCHEDULE_DOCS = {"HEARTBEAT.MD", "CRON.MD"}
+
+DAILY_LOG = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$", re.I)
+
 
 DOC_NAMES = {name.upper(): label for name, label in {
     "AGENTS.md": "instructions", "SOUL.md": "persona", "IDENTITY.md": "identity",
@@ -186,24 +208,95 @@ def from_claude_code(text: str, name_hint: str = "") -> AgentManifest:
     return manifest
 
 
+def _secret_hits(text: str) -> list[str]:
+    """which credential shapes this text contains, named and never echoed."""
+    hits = []
+    for shape, pattern in SECRET_SHAPES.items():
+        if re.search(pattern, text or ""):
+            hits.append(shape)
+    return sorted(set(hits))
+
+
+def _tool_names(text: str) -> tuple[list[str], list[str]]:
+    """the tools a TOOLS.md asks for, mapped. prose is not a permission.
+
+    only two things count as a request: a word that is a known tool name, and a token
+    that is written like an identifier (in backticks, or carrying a dot, dash or
+    underscore). the rest of a prose file is prose, and reading it as a tool list would
+    turn "use bash freely" into a grant.
+    """
+    lowered_text = (text or "").lower()
+    granted: list[str] = []
+    for word, target in TOOL_MAP.items():
+        # a mapped name inside a dotted identifier is a different tool, not this one
+        if re.search(rf"(?<![a-z0-9_.:-]){re.escape(word)}(?![a-z0-9_.:-])", lowered_text):
+            if target not in granted:
+                granted.append(target)
+    unknown: list[str] = []
+    for token in re.findall(r"`([^`]{1,40})`", text or ""):
+        for word in re.findall(r"[A-Za-z][A-Za-z0-9_.:-]{1,40}", token):
+            if word.lower() in TOOL_MAP or word.lower() in {"the", "and", "use"}:
+                continue
+            unknown.append(word)
+    for word in re.findall(r"\b[A-Za-z][A-Za-z0-9]*[._:-][A-Za-z0-9_.:-]+\b", text or ""):
+        if word.lower() not in TOOL_MAP:
+            unknown.append(word)
+    return granted, sorted(set(unknown))
+
+
 def from_openclaw(files: dict[str, str], name_hint: str = "") -> AgentManifest:
-    """a directory of markdown: prose is the agent, so prose is what gets imported."""
-    lowered = {os.path.basename(path).upper(): text for path, text in files.items()}
+    """a directory of markdown: prose is the agent, so prose is what gets imported.
+
+    the split the source itself insists on is kept: SOUL.md is voice, AGENTS.md is
+    operating rules, and both reach the prompt under their own heading. everything the
+    source calls memory arrives as knowledge, because text we did not write is data the
+    agent may read, never instructions it must follow.
+    """
+    if not isinstance(files, dict) or not files:
+        raise ValidationError("an openclaw bundle is a mapping of path to text",
+                              reason="workspace_empty")
+    # a workspace that ships a credential refuses whole: the key may also be in a prompt,
+    # and an import that quietly drops the file it found it in teaches nobody anything
+    for path, text in files.items():
+        hits = _secret_hits(str(text))
+        if hits:
+            raise ValidationError(
+                f"{path} contains what looks like a credential ({', '.join(hits)}); "
+                "redact it and import again", reason="workspace_carries_a_secret",
+                file=path, shapes=hits)
+
+    # the workspace's own documents are one each; SKILL.md is one per skill, so it is
+    # found by walking every path rather than by basename alone
+    singleton = {"AGENTS.MD", "SOUL.MD", "IDENTITY.MD", "USER.MD", "MEMORY.MD",
+                 "NOTES.MD", "TOOLS.MD"} | SCHEDULE_DOCS
+    lowered: dict[str, tuple[str, str]] = {}
+    entries: list[tuple[str, str, str]] = []
+    for path, text in files.items():
+        base = os.path.basename(path).upper()
+        entries.append((base, path, str(text)))
+        if base in singleton:
+            if base in lowered:
+                raise ValidationError(
+                    f"two files are both called {base}: {lowered[base][0]} and {path}",
+                    reason="workspace_ambiguous", file=base)
+            lowered[base] = (path, str(text))
     if not any(key in lowered for key in ("AGENTS.MD", "SOUL.MD", "IDENTITY.MD")):
         raise ValidationError(
             "an openclaw style bundle needs at least one of AGENTS.md, SOUL.md or IDENTITY.md",
-            found=sorted(lowered),
-        )
+            found=sorted(lowered), reason="workspace_has_no_voice")
+
     meta: dict[str, Any] = {}
     warnings: list[str] = []
-    if "IDENTITY.MD" in lowered:
-        identity_meta, _, identity_warnings = split_frontmatter(lowered["IDENTITY.MD"])
-        meta.update(identity_meta)
-        warnings.extend(identity_warnings)
+    for key in ("IDENTITY.MD", "SOUL.MD", "AGENTS.MD"):
+        if key in lowered:
+            found_meta, _, found_warnings = split_frontmatter(lowered[key][1])
+            for name, value in found_meta.items():
+                meta.setdefault(name, value)
+            warnings.extend(found_warnings)
     name = str(meta.get("name") or name_hint or "").strip()
     if not name:
         first_heading = ""
-        for text in lowered.values():
+        for _, text in lowered.values():
             for line in text.splitlines():
                 if line.strip().startswith("#"):
                     first_heading = line.strip("# ").strip()
@@ -211,34 +304,64 @@ def from_openclaw(files: dict[str, str], name_hint: str = "") -> AgentManifest:
             if first_heading:
                 break
         name = first_heading or "imported agent"
+        warnings.append("no name in the workspace: imported as '" + name + "'")
 
     manifest = AgentManifest(name=name, source=SOURCE_OPENCLAW, warnings=warnings,
                              metadata={"origin": "openclaw style bundle",
-                                       "files": sorted(lowered)})
+                                       "files": sorted(files)})
     parts: list[str] = []
-    for filename, text in sorted(lowered.items()):
-        if not filename.endswith(".MD"):
-            continue
+    skill_docs: list[dict] = []
+    granted: list[str] = []
+    for base, path, text in sorted(entries, key=lambda e: e[1]):
         _, body, _ = split_frontmatter(text)
-        role = DOC_NAMES.get(filename.upper(), "")
-        if filename in {"AGENTS.MD", "SOUL.MD", "IDENTITY.MD"}:
-            parts.append(f"## {role or filename}\n{body.strip()}")
-        elif body.strip():
-            manifest.knowledge.append({"title": f"{role or filename} (imported)",
-                                       "text": body.strip()[:20000]})
-    manifest.instructions = "\n\n".join(parts).strip()
+        body = body.strip()
+        if base in {"AGENTS.MD", "SOUL.MD", "IDENTITY.MD"}:
+            label = DOC_NAMES.get(base, base)
+            parts.append(f"## {label}\n{body}")
+            continue
+        if base == "SKILL.MD":
+            # a skill is know-how with a name and a trigger, so it is validated by the
+            # same rules a hand written one meets. the source skips invalid siblings too.
+            try:
+                parsed = skill_specs.validate(skill_specs.parse_skill_md(text))
+            except ValidationError as exc:
+                warnings.append(f"skill skipped: {exc} ({path})")
+                continue
+            skill_docs.append({"name": parsed["name"], "text": text,
+                               "description": parsed["description"]})
+            continue
+        if base in SCHEDULE_DOCS:
+            manifest.unmapped.append(f"schedule.{base.lower()}")
+            warnings.append(f"{path} describes a cadence; a routine is a crew decision")
+            continue
+        if DAILY_LOG.match(base):
+            warnings.append(f"{path} is a daily log, which is history rather than "
+                            "knowledge; not imported")
+            continue
+        if base == "TOOLS.MD":
+            tools, unknown = _tool_names(body)
+            granted.extend(t for t in tools if t not in granted)
+            manifest.unmapped.extend(f"tools.{word}" for word in unknown)
+            continue
+        if base.endswith(".MD") and body:
+            label = DOC_NAMES.get(base, path)
+            manifest.knowledge.append({"title": f"{label} (imported)",
+                                       "text": body[:20000]})
+            continue
+        if base.endswith(".MD"):
+            continue
+        warnings.append(f"{path} is not markdown and was not read")
+
+    manifest.instructions = "\n\n".join(p for p in parts if p).strip()
     manifest.role = str(meta.get("role") or meta.get("title") or "")[:200]
     manifest.model = str(meta.get("model") or "")
-    skills = sorted({os.path.basename(os.path.dirname(path))
-                     for path in files
-                     if os.path.basename(path).upper() in {"SKILL.MD", "SKILLS.MD"}})
-    manifest.skills = [skill for skill in skills if skill and skill != "."]
+    manifest.skills = [doc["name"] for doc in skill_docs]
+    manifest.tools = granted
+    manifest.metadata["skill_docs"] = skill_docs
     manifest.memory = dict(meta.get("memory") or {}) if isinstance(meta.get("memory"), dict) else {}
     for key in meta:
         if key not in {"name", "role", "title", "model", "memory"}:
             manifest.unmapped.append(f"identity.{key}")
-    manifest.metadata["skill_sources"] = [path for path in files
-                                          if os.path.basename(path).upper() == "SKILL.MD"]
     return manifest
 
 
@@ -633,6 +756,20 @@ def adopt(app, team_id: str, manifest: AgentManifest, name: str = "") -> dict:
     )
     profile = app.profile
     written: list[str] = []
+    warnings = list(manifest.warnings)
+    # a skill the source carried is imported as the SKILL.md it was, not as a label: a
+    # name on a profile with no body behind it is know-how the agent does not have
+    for doc in manifest.metadata.get("skill_docs") or []:
+        if getattr(app, "skills", None) is None:
+            warnings.append(f"skill '{doc.get('name')}' was read but this deployment has "
+                            "no skill service to store it")
+            continue
+        try:
+            app.skills.create(team_id, text=doc["text"], agents=[agent["id"]],
+                              origin="imported", source=manifest.source)
+            written.append(f"skill.{doc.get('name')}")
+        except ValidationError as exc:
+            warnings.append(f"skill '{doc.get('name')}' not imported: {exc}")
     if profile is not None:
         for index, doc in enumerate(manifest.knowledge or []):
             title = str(doc.get("title") or f"imported doc {index + 1}")[:120]
@@ -651,7 +788,7 @@ def adopt(app, team_id: str, manifest: AgentManifest, name: str = "") -> dict:
                      "approval": manifest.approval},
                     origin=f"import:{manifest.source}")
         written.append("instructions.import-source")
-    warnings = list(manifest.warnings)
+    warnings.extend(manifest.warnings)
     deployed_model = getattr(app.settings, "llm_model", "")
     if manifest.model and deployed_model and manifest.model != deployed_model:
         warnings.append(

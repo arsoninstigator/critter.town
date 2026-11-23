@@ -367,6 +367,19 @@ that makes it a claim: it composes every agent's context and every body of reach
 looks for the criteria in them, so a slice added later that happens to carry one fails there
 instead of quietly making the next metric meaningless.
 
+### workspace import
+
+reading an agent out of the shape another tool stores it in. openclaw is a directory of
+markdown: `SOUL.md` is voice, `AGENTS.md` is operating rules, `MEMORY.md` and `USER.md` are
+memory, `TOOLS.md` is a request for tools, `HEARTBEAT.md` is a cadence, `skills/*/SKILL.md`
+is know-how, and `memory/YYYY-MM-DD.md` is history. every format is read into one manifest,
+and only the manifest is adopted, so a new format never touches the adoption path.
+
+three rules hold whatever the format. memory is data, never instruction, so it lands as
+knowledge the agent may read rather than text in its prompt. a tool name is mapped or it is
+unmapped, never copied, because a word is not a permission. and a workspace carrying a
+credential is refused whole, since the key may also be in a prompt.
+
 ### custody of a key
 
 who can sign as an agent, and therefore what its signature is worth. `local` means the

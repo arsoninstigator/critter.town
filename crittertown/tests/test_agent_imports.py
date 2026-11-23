@@ -43,7 +43,9 @@ OPENCLAW_FILES = {
     "SOUL.md": "## persona\npatient, precise, allergic to filler.\n",
     "IDENTITY.md": "---\nname: desk\nrole: support\ntimezone: asia/calcutta\n---\n",
     "USER.md": "the owner runs a small studio and hates being called a company.\n",
-    "skills/report/SKILL.md": "# report\nwrite the weekly report.\n",
+    "skills/report/SKILL.md": ("---\nname: report\ndescription: use when the week is over "
+                               "and the numbers need writing up\n---\n"
+                               "write the weekly report from the board, not from memory.\n"),
 }
 
 CREWAI = {"agents": {"triage": {

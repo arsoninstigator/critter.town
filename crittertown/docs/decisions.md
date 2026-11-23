@@ -629,3 +629,25 @@ two refusals carry the reasoning. a rekey is refused rather than replaced, since
 that can change its key on request can deny what it signed yesterday. and an unsigned beat
 is recorded as unsigned: a row that says nothing about who made it is still a row, and
 dressing it up is the failure this path exists to prevent.
+
+## what an imported workspace is allowed to become
+
+the importer existed before the workspace was tested against a real one, and the difference
+was four silences. a skill arrived as a directory name with no body behind it, so the agent
+carried a label for know-how it did not have. a `TOOLS.md` became a knowledge entry, which
+is the wrong drawer and also the wrong idea, since prose is not a permission. a
+`HEARTBEAT.md` became knowledge too, turning a cadence into a paragraph. and a workspace
+shipping a key was imported without a word.
+
+the fixes follow one rule each. a skill is validated by the same rules a hand written one
+meets and imported as the `SKILL.md` it was, because a name on a profile with no body is
+worse than nothing. a tool name is mapped or reported, never copied, since `bash` in another
+tool means a specific thing there and granting the word here would look like a permission
+without being one. a cadence is a crew decision, so a heartbeat file becomes an unmapped
+item rather than knowledge. and a workspace carrying a credential is refused whole, because
+the key may also sit inside a prompt, and quietly dropping the one file it was found in
+teaches nobody anything.
+
+the part worth keeping is the one that was already right: memory arrives as knowledge. text
+we did not write is data an agent may read and weigh, never instruction it must follow, and
+an imported `MEMORY.md` in a prompt would be somebody else's orders wearing this crew's name.
