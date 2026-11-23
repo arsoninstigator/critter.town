@@ -60,6 +60,7 @@ from work.replenish import ReplenishService
 from work.heartbeat import HeartbeatService
 from work.skills import SkillService
 from work.templates import TemplateService
+from work.holdout import HoldoutService
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -125,6 +126,8 @@ class App:
     skills: SkillService
     # a crew as a document, so one can be handed over or stood up in a call
     templates: TemplateService
+    # the acceptance criteria a crew may not read, and the ledger of who tried
+    holdout: HoldoutService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -356,6 +359,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
                             knowledge=knowledge, profile=profile, a2a=a2a, skills=skills)
     # a crew as a document: export, import, and the smallest crew that can close a card
     templates = TemplateService(store, crews=crews, guardrails=guardrails, skills=skills)
+    # the criteria a crew is measured on, kept where the crew cannot read them
+    holdout = HoldoutService(store, crews=crews, knowledge=knowledge, lessons=lessons,
+                             intent=intent, skills=skills, context=context)
     runner.context = context
 
     kanban.events_hook = emit
@@ -421,6 +427,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         heartbeat=heartbeat,
         skills=skills,
         templates=templates,
+        holdout=holdout,
         polls=polls,
         browsers=browsers,
         ops=ops,

@@ -232,6 +232,23 @@ platform sets is refused by name. the document also has to be staffable as writt
 external worker cannot be hired as a reviewer, and a kind cannot fill a seat it never holds.
 every one of those is checked before a single row is written.
 
+### the holdout wall
+
+the criteria a crew is measured on are the one thing it must not be able to read.
+
+- `POST /crews/{id}/holdout` seals the scenarios and refuses three ways: no scenarios,
+  already sealed, and `criteria_already_in_context`, which fires when the answers can
+  already be found in the crew's knowledge, skills, lessons, intent or agent prompts. a wall
+  around something already in the room is decoration.
+- `GET /crews/{id}/holdout` answers how many and how the runs went, never what they say.
+- `POST /crews/{id}/holdout/run` scores the crew with the configured model. the run records
+  its metric even when the crew tried to look, and marks itself tainted, because a metric
+  with a footnote is worth more than one with a lie attached.
+- `GET /crews/{id}/holdout/verify` is the check that makes the wall a claim: it composes
+  every agent's context and scans everything the crew can be handed for the criteria.
+- `GET /crews/{id}/holdout/access` is the ledger. an agent presenting itself to the read path
+  is refused by name and the refusal is a row, since an attempt is the interesting half.
+
 ### the heartbeat: an agent we do not run
 
 `POST /agents/{id}/heartbeat` with `{key, ttl_seconds}` is how a worker built somewhere else asks

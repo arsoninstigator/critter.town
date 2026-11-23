@@ -303,6 +303,33 @@ def create_api(app: App | None = None) -> FastAPI:
     def rail_refusals(team_id: str, limit: int = Query(50)) -> dict:
         return {"refusals": app.guardrails.refusals(team_id, limit=limit)}
 
+    # ---- the holdout wall ------------------------------------------------
+    # the criteria a crew is measured on. the state route answers how many and how it went,
+    # never what they say: the wall is only a wall if the reading is rationed on the api too.
+    @api.post("/crews/{team_id}/holdout")
+    def seal_holdout(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        return app.holdout.seal(team_id, data.get("scenarios") or [],
+                                actor=str(data.get("actor", "owner")))
+
+    @api.get("/crews/{team_id}/holdout")
+    def read_holdout_state(team_id: str) -> dict:
+        return app.holdout.state(team_id)
+
+    @api.post("/crews/{team_id}/holdout/run")
+    def run_holdout(team_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        model = app.runner.model if getattr(app, "runner", None) is not None else None
+        return app.holdout.run(team_id, model, actor=str(data.get("actor", "owner")))
+
+    @api.get("/crews/{team_id}/holdout/verify")
+    def verify_holdout(team_id: str) -> dict:
+        return app.holdout.verify(team_id)
+
+    @api.get("/crews/{team_id}/holdout/access")
+    def holdout_access(team_id: str, limit: int = Query(50)) -> dict:
+        return {"access": app.holdout.access(team_id, limit=limit)}
+
     # ---- crew templates -------------------------------------------------
     # a crew as a document: out for handing over, in for standing one up, and the skeleton
     # for the question "what is the least a crew can be".

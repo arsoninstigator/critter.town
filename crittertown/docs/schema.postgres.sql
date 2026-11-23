@@ -659,6 +659,47 @@ create index if not exists rail_refusals_team on rail_refusals (team_id, created
 
 -- self improvement: an agent proposes, a person disposes, and the proposal is a row
 -- so the profile can say where an instruction came from.
+-- v25: the holdout wall. scenarios a crew is measured on, kept where the crew cannot read
+-- them. the generator optimising against its own acceptance criteria is the failure this
+-- exists for, so the criteria live in their own tables and every read of them is a row.
+create table if not exists holdout_scenarios (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    name text not null,
+    input text not null,
+    expect text not null,
+    scorer text not null default '{"kind":"contains"}',
+    sealed_date double precision not null,
+    created_date double precision not null
+);
+create index if not exists holdout_scenarios_crew on holdout_scenarios (team_id);
+
+-- who looked, and what they claimed to be. a refused attempt is a row too, because an
+-- attempt is the interesting half of a wall.
+create table if not exists holdout_access (
+    id text primary key,
+    team_id text not null,
+    scenario_id text not null default '',
+    actor text not null,
+    reason text not null default '',
+    refused integer not null default 0,
+    created_date double precision not null
+);
+create index if not exists holdout_access_crew on holdout_access (team_id, created_date);
+
+-- a scored run, and whether it was clean when it was scored.
+create table if not exists holdout_runs (
+    id text primary key,
+    team_id text not null,
+    scenarios integer not null default 0,
+    passed integer not null default 0,
+    metric double precision not null default 0,
+    clean integer not null default 1,
+    access_during integer not null default 0,
+    actor text not null default 'owner',
+    created_date double precision not null
+);
+
 -- v23: skills. a skill is know-how with a name and a trigger, loaded in three stages so a
 -- crew with forty of them does not spend forty bodies of context on a card that needs none.
 create table if not exists skills (

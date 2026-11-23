@@ -576,3 +576,26 @@ platform is broken. the smallest crew that can finish a card is a doer and a rev
 skeleton is those two, three rails and one skill that says how to close a card with the
 reference its kind asks for. `POST /crews/skeleton` is now the shortest honest answer to
 "how do i start".
+
+## the holdout wall: measure a crew on what it cannot read
+
+the last of the four research fronts, and the one that decides whether any of the others can
+be trusted. michaellaws/dark-factory has the sharpest statement of it: the generating agent
+works in a sparse checkout where the holdout directory does not exist, so it cannot read the
+test it will be measured on, and a separate process runs that test and merges on the number.
+without that wall an agent that is told to improve its score will improve its score.
+
+there is no filesystem here to leave a directory out of, so the wall is three rules. the
+scenarios live in their own tables and no slice builder reads them, which is structural, and
+`verify` proves it rather than trusting it: it composes every agent's context and every body
+of reachable text and looks for the criteria inside them, so a slice added in six months that
+happens to carry a scenario fails there instead of quietly making the next metric
+meaningless. a read is a row: the eval runner reads as `eval`, and anything presenting itself
+as an agent is refused by name and logged, because an attempt is the interesting half of a
+wall. and a run is clean only if nobody touched the scenarios between the seal and the score,
+which is why a tainted run still records its number and says so.
+
+the seal refuses a crew that can already read its own criteria. that refusal is the one that
+matters most in practice, because the usual way a holdout leaks is not an attack: somebody
+pastes the acceptance criteria into a skill so the agents know what good looks like, and from
+then on the number is a compliment.

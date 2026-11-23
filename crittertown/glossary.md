@@ -357,6 +357,16 @@ calls itself, whenever it decides to: the browser, the sandbox, workflows for a 
 board. the difference is who decides the order. a workflow decides for a node; the agent
 decides for a service.
 
+### holdout
+
+the acceptance criteria a crew is measured on, kept where the crew cannot read them. the
+generating agent that can see its own test does not fail it, it optimises for it, so the
+scenarios live in their own tables, no slice builder reads them, every read is a row, and a
+run is clean only if nobody touched them between the seal and the score. `verify` is the part
+that makes it a claim: it composes every agent's context and every body of reachable text and
+looks for the criteria in them, so a slice added later that happens to carry one fails there
+instead of quietly making the next metric meaningless.
+
 ### crew template
 
 a crew as a document. it carries what the crew knows and how it is staffed, and refuses to
