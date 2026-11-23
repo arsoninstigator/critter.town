@@ -264,6 +264,28 @@ roster will not seat one in a judging seat and `POST /tasks/{id}/approve` refuse
 `external_agent_cannot_review`. `GET /agents/{id}/heartbeat` reads back what it may do, when it
 last asked and what it is holding.
 
+
+a worker we do not run brings its own key, because a key we minted would make every
+signature on its rows a statement about us:
+
+- `POST /agents/{id}/identity` with `{pubkey}` registers a 32 byte x-only schnorr key for
+  an external agent. it refuses a local agent (`not_external`), a malformed key
+  (`bad_pubkey`), a second different key for the same agent (`key_already_registered`, since
+  a principal that can rekey on request can deny what it signed yesterday) and a key
+  already held by another agent (`pubkey_in_use`). `GET /agents/{id}/identity` answers the
+  public half, the custody and whether we can sign for it, which for an external worker is
+  no.
+- `POST /agents/{id}/heartbeat` accepts `signature`, `at` and `nonce`. the signature is over
+  `sha256(canonical({"at": ..., "nonce": ...}))`, so it is a statement the platform cannot
+  make. a signed beat without `at` is refused (`beat_signature_needs_at`), a signature from
+  a key that is not registered is refused (`no_registered_key`), and a bad one is refused
+  (`signature_invalid`) before anything is written.
+- the beat writes one `heartbeat` audit row. unsigned when the worker brought no signature,
+  which is recorded rather than hidden, and attested when it did. `attests: payload` says
+  the signature covers the payload; `attests: row` says we signed the row digest, as we do
+  for an agent we run. `attest.verify_entries()` and `audit.verify()` both follow that flag,
+  so a bundle still verifies with no database.
+
 ### custody: who holds a card
 
 - `GET /tasks/{id}/custody` returns the holder, the lease expiry, the attempt count and

@@ -367,6 +367,19 @@ that makes it a claim: it composes every agent's context and every body of reach
 looks for the criteria in them, so a slice added later that happens to carry one fails there
 instead of quietly making the next metric meaningless.
 
+### custody of a key
+
+who can sign as an agent, and therefore what its signature is worth. `local` means the
+platform holds the secret and signs on the agent's behalf, so the row is our statement
+about it. `external` means the worker we do not run brought its own public key: we keep
+that half, hold no secret, and its rows are unattested until it signs them. the
+difference is the whole point of a signature, since a key we minted proves only that we
+wrote the row.
+
+an external worker's signature covers the canonical payload it can reconstruct, not the
+row digest, because the row digest contains our sequence number and the previous hash. the
+row's own hash still chains the payload into place, so editing either breaks `verify()`.
+
 ### crew template
 
 a crew as a document. it carries what the crew knows and how it is staffed, and refuses to

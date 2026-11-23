@@ -278,7 +278,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # a message to another crew is a crossing, so the wall is on the a2a path too
     a2a.crossings = crossings
     # an external agent is hired by one call: it beats, and the answer is a card or a reason
-    heartbeat = HeartbeatService(store, crews=crews, custody=custody, strikes=strikes)
+    heartbeat = HeartbeatService(store, crews=crews, custody=custody, strikes=strikes,
+                                audit=audit)
     runner.strikes = strikes
     # a breakdown reads the project's slices, the parts' budget, a frozen seat and a door
     # out of the crew, so the same services answer it as answer dispatch

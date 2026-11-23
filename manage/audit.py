@@ -103,7 +103,11 @@ class AuditService:
         target_kind: str = "",
         target_id: str = "",
         payload: dict | None = None,
+        attestation: str = "",
     ) -> dict:
+        """write one row. `attestation` is a signature from a worker we do not run, over
+        the canonical payload, so the row can carry a statement the platform could not
+        have made. an invalid one refuses the row rather than storing a claim."""
         if not agent_id:
             raise ValidationError("audit rows need an agent_id")
         payload_json = _canonical(payload or {})
@@ -123,6 +127,17 @@ class AuditService:
             signer = attest.agentid_for(keypair.pubkey) if keypair else ""
             pubkey = keypair.pubkey if keypair else ""
             signature = attest.sign_digest(keypair, digest) if keypair else ""
+            if attestation:
+                # the worker signs what it can reconstruct: the payload, not a digest that
+                # contains our sequence number and the previous hash
+                claim = attest.payload_digest(payload_json)
+                verdict = self.keys.verify_claim(agent_id, claim, attestation)
+                if not verdict["ok"]:
+                    raise ValidationError(
+                        f"that attestation does not verify: {verdict['why']}",
+                        reason=verdict["why"])
+                signer, pubkey, signature = (verdict["agentid"], verdict["pubkey"],
+                                            attestation)
             c.execute(
                 """insert into agent_audit
                    (id, team_id, agent_id, seq, action, actor_kind, actor_id, target_kind,
@@ -188,6 +203,10 @@ class AuditService:
             "pubkey": row["pubkey"] if "pubkey" in row.keys() else "",
             "sig": row["sig"] if "sig" in row.keys() else "",
             "attested": bool(("sig" in row.keys()) and row["sig"]),
+            # a row signed here covers the row digest; a worker's signature covers the
+            # payload it could reconstruct, and the row's hash chains it into place
+            "attests": ("payload" if self.keys.custody_of(row["agent_id"]) == "external"
+                        else "row"),
             "created_date": row["created_date"],
         }
 
@@ -225,7 +244,11 @@ class AuditService:
             signature = row["sig"] if "sig" in row.keys() else ""
             signer = row["signer"] if "signer" in row.keys() else ""
             if pubkey and signature:
-                good = attest.verify_signature(signature, recomputed, pubkey)
+                # same rule as the offline verifier: a worker signs its payload, we sign
+                # the whole row, and the row's hash chains either one into place
+                covers = (attest.payload_digest(row["payload"])
+                          if self.keys.custody_of(agent_id) == "external" else recomputed)
+                good = attest.verify_signature(signature, covers, pubkey)
                 owned = (not signer) or attest.agentid_matches(signer, pubkey)
                 if not good or not owned:
                     return {
@@ -262,7 +285,7 @@ class AuditService:
         if not agent:
             raise NotFound(f"agent {agent_id} not found")
         entries = list(reversed(self.history(agent_id, limit=100000)))
-        pubkey = self.keys.pubkey_of(agent_id)
+        pubkey = self.keys.public_key_of(agent_id)
         return {
             "kind": "crittertown.attestation",
             "version": 1,

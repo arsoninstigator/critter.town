@@ -53,11 +53,13 @@ def eligible(tasks: list[dict], agent: dict, leased: set[str],
 
 
 class HeartbeatService:
-    def __init__(self, store: Store, crews=None, custody=None, strikes=None):
+    def __init__(self, store: Store, crews=None, custody=None, strikes=None, audit=None):
         self.store = store
         self.crews = crews
         self.custody = custody
         self.strikes = strikes
+        # a beat is a statement by the worker, so it belongs in the trail
+        self.audit = audit
 
     # ---- reads ---------------------------------------------------------
     def agent(self, agent_id: str) -> dict:
@@ -83,7 +85,14 @@ class HeartbeatService:
                 "holding": ({"id": held["id"], "title": held["title"]} if held else None)}
 
     # ---- the beat ------------------------------------------------------
-    def beat(self, agent_id: str, key: str = "", ttl: float = LEASE_SECONDS) -> dict:
+    def beat(self, agent_id: str, key: str = "", ttl: float = LEASE_SECONDS,
+             attestation: str = "", at: float = 0.0, nonce: str = "") -> dict:
+        """one knock. `attestation` is the worker's signature over the canonical payload it
+        sends with the knock, which is the only claim here that we cannot make ourselves."""
+        if attestation and not at:
+            raise ValidationError(
+                "a signed beat carries the time it signed, so the signature has an hour on "
+                "it", reason="beat_signature_needs_at")
         agent = self.agent(agent_id)
         if not external.is_external(agent):
             raise NotAllowed("this agent is run by the platform; it is dispatched, not polled",
@@ -98,6 +107,7 @@ class HeartbeatService:
                                  agent_id=agent_id, why="seat_not_live",
                                  standing=standing["standing"])
         ts = now()
+        self._attest(agent, ts, attestation, at, nonce)
         with self.store.tx() as c:
             c.execute("update agents set heartbeat_at = ?, updated_date = ? where id = ?",
                       (ts, ts, agent_id))
@@ -127,6 +137,22 @@ class HeartbeatService:
         lease = self.custody.claim(task["id"], agent_id, ttl=ttl)
         row = self.store.one("select * from tasks where id = ?", (task["id"],))
         return {"ok": True, "why": "", "task": self._card(row, agent), "lease": lease, "at": ts}
+
+    def _attest(self, agent: dict, ts: float, attestation: str, at: float,
+                nonce: str) -> None:
+        """the beat goes in the trail, signed by the worker when it brought a signature.
+
+        an unsigned beat is recorded as unsigned rather than dressed up: a row that says
+        nothing about who made it is still a row, and pretending otherwise is the failure
+        this whole path exists to avoid.
+        """
+        if self.audit is None:
+            return
+        payload = {"at": at or ts} if attestation else {"at": ts}
+        if attestation:
+            payload["nonce"] = nonce
+        self.audit.record(agent["team_id"], agent["id"], "heartbeat",
+                          payload=payload, attestation=attestation)
 
     # ---- the card as the worker sees it ---------------------------------
     def _card(self, row, agent: dict) -> dict:

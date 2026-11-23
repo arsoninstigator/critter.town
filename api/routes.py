@@ -39,6 +39,7 @@ from agents.context import SLICES
 from work.liveness import violations
 from work import roster as formation
 from work import templates as templates_module
+from manage import attest
 from work import topology
 from core.app import App, build_app
 from comms.events import Event
@@ -422,7 +423,26 @@ def create_api(app: App | None = None) -> FastAPI:
     def heartbeat(agent_id: str, payload: dict = Body(default={})) -> dict:
         data = body(payload or {})
         ttl = float(data.get("ttl_seconds") or 900)
-        return app.heartbeat.beat(agent_id, key=str(data.get("key", "")), ttl=ttl)
+        return app.heartbeat.beat(
+            agent_id, key=str(data.get("key", "")), ttl=ttl,
+            attestation=str(data.get("signature", "")),
+            at=float(data.get("at") or 0.0), nonce=str(data.get("nonce", "")))
+
+    # a worker we do not run brings its own key; we keep the public half and nothing else
+    @api.post("/agents/{agent_id}/identity")
+    def register_external_identity(agent_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        row = app.audit.keys.register_external(agent_id, str(data.get("pubkey", "")))
+        return {"agent_id": agent_id, "pubkey": row["pubkey"], "custody": row["custody"],
+                "agentid": attest.agentid_for(row["pubkey"])}
+
+    @api.get("/agents/{agent_id}/identity")
+    def read_identity(agent_id: str) -> dict:
+        pubkey = app.audit.keys.public_key_of(agent_id)
+        return {"agent_id": agent_id, "pubkey": pubkey,
+                "custody": app.audit.keys.custody_of(agent_id),
+                "agentid": attest.agentid_for(pubkey) if pubkey else "",
+                "attested": bool(app.audit.keys.for_agent(agent_id))}
 
     @api.get("/agents/{agent_id}/inbox")
     def inbox(agent_id: str, limit: int = Query(50, ge=1, le=200)) -> dict:

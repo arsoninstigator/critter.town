@@ -599,3 +599,33 @@ the seal refuses a crew that can already read its own criteria. that refusal is 
 matters most in practice, because the usual way a holdout leaks is not an attack: somebody
 pastes the acceptance criteria into a skill so the agents know what good looks like, and from
 then on the number is a compliment.
+
+## whose signature is on an external worker's row
+
+the external-agent unit opened a hole in the trail that nobody could see from the outside.
+`add_agent` minted a keypair for every agent it created, and the audit chain signed each
+row with the key belonging to the agent the row named. for an agent we run that is exactly
+right: the signature says the platform's own custody wrote this, which is what it means. for
+a worker we do not run it says something false, because we made the key. every row
+attributed to that worker carried a signature we produced, and a reader had no way to tell
+it apart from testimony.
+
+the fix is not a flag on the row, it is custody. `comms_identities.custody` already existed
+and already read `local`; it now has an `external` value that means the platform holds the
+public half and no secret. `KeyStore.for_agent` returns nothing for such an agent, and
+`_mint` refuses one outright, because that function is the only place a forged signature
+could be born. the worker registers its own key with `POST /agents/{id}/identity`.
+
+that made one thing impossible and it is worth being precise about. we used to sign a digest
+over the whole row, which is the strongest version: sequence number, previous hash, action,
+payload, all of it. a worker outside this process cannot compute that digest, because the
+sequence number and the previous hash are ours. so a worker signs its canonical payload
+instead, and the row carries `attests: payload` to say which digest the signature covers.
+the row's own hash still chains that payload into place, so editing the payload breaks the
+chain and forging the signature fails against the registered key. it is a weaker statement
+than ours, honestly labelled, rather than an equally strong one that is not true.
+
+two refusals carry the reasoning. a rekey is refused rather than replaced, since a principal
+that can change its key on request can deny what it signed yesterday. and an unsigned beat
+is recorded as unsigned: a row that says nothing about who made it is still a row, and
+dressing it up is the failure this path exists to prevent.

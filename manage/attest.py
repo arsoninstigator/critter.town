@@ -33,6 +33,7 @@ from comms import bech32
 from comms import identity as keys
 from comms.identity import Keypair
 from core.db import Store, loads, now
+from core.errors import Conflict, NotFound, ValidationError
 
 AGENT_HRP = "agent"
 SUBAGENT_HRP = "sub"
@@ -130,6 +131,11 @@ def sign_digest(keypair: Keypair, digest: str) -> str:
     return keypair.sign(bytes.fromhex(digest))
 
 
+def payload_digest(payload_json: str) -> str:
+    """the digest a worker outside this process can compute: the canonical payload only."""
+    return hashlib.sha256((payload_json or "").encode("utf-8")).hexdigest()
+
+
 def verify_signature(sig_hex: str, digest: str, pubkey_hex: str) -> bool:
     try:
         return keys.verify(sig_hex, bytes.fromhex(digest), pubkey_hex)
@@ -157,14 +163,24 @@ class KeyStore:
     def mint(self) -> bool:
         return bool(self._mint_source() if callable(self._mint_source) else self._mint_source)
 
+    def hosting_of(self, agent_id: str) -> str:
+        row = self.store.one("select hosting from agents where id = ?", (agent_id,))
+        return (row["hosting"] if row is not None else "") or "local"
+
     def for_agent(self, agent_id: str) -> Keypair | None:
+        """the key that signs on this agent's behalf, or None when nobody here may.
+
+        an external worker's key is not ours: minting one and signing its rows would make
+        every one of those signatures a statement about us, not about it. so it has no
+        secret key here at all, and its rows are unattested until it signs them itself.
+        """
         if not agent_id:
             return None
         if agent_id in self._cache:
             return self._cache[agent_id]
         row = self.store.one("select * from comms_identities where agent_id = ?", (agent_id,))
         if row is None:
-            if not self.mint:
+            if not self.mint or self.hosting_of(agent_id) == "external":
                 return None
             row = self._mint(agent_id)
             if row is None:
@@ -184,8 +200,12 @@ class KeyStore:
         return agentid_for(pubkey) if pubkey else ""
 
     def _mint(self, agent_id: str):
-        agent = self.store.one("select id, team_id, name from agents where id = ?", (agent_id,))
+        agent = self.store.one(
+            "select id, team_id, name, hosting from agents where id = ?", (agent_id,))
         if not agent:
+            return None
+        if (agent["hosting"] or "local") == "external":
+            # a second gate, because this is the one place a forged signature could be born
             return None
         keypair = keys.generate()
         with self.store.tx() as c:
@@ -196,6 +216,80 @@ class KeyStore:
                 (agent_id, agent["team_id"], agent["name"], keypair.pubkey, keypair.seckey, now()),
             )
         return self.store.one("select * from comms_identities where agent_id = ?", (agent_id,))
+
+
+    # ---- an external worker's own key -----------------------------------
+    def public_key_of(self, agent_id: str) -> str:
+        """the key a row should name, whether or not we hold its secret."""
+        row = self.store.one(
+            "select pubkey from comms_identities where agent_id = ?", (agent_id,))
+        if row is not None and row["pubkey"]:
+            return row["pubkey"]
+        return self.pubkey_of(agent_id)
+
+    def custody_of(self, agent_id: str) -> str:
+        row = self.store.one(
+            "select custody, seckey from comms_identities where agent_id = ?", (agent_id,))
+        if row is None:
+            return ""
+        return row["custody"] or ("local" if row["seckey"] else "external")
+
+    def register_external(self, agent_id: str, pubkey: str) -> dict:
+        """the worker brings its own key. the platform keeps the public half and nothing else.
+
+        this is the whole difference between a signature and a claim: after this call, a
+        row carrying this agent's signature was made by whoever holds that key, and we
+        cannot make one. so the refusals matter more than the write.
+        """
+        agent = self.store.one(
+            "select id, team_id, name, hosting from agents where id = ?", (agent_id,))
+        if not agent:
+            raise NotFound(f"agent {agent_id} not found")
+        if (agent["hosting"] or "local") != "external":
+            raise ValidationError(
+                "this agent is run by the platform, which already holds its key; a "
+                "registered key is for a worker we do not run", reason="not_external")
+        pubkey = (pubkey or "").strip().lower()
+        try:
+            agentid_for(pubkey)
+        except ValueError as exc:
+            raise ValidationError(f"that is not a usable public key: {exc}",
+                                  reason="bad_pubkey") from exc
+        existing = self.store.one(
+            "select * from comms_identities where agent_id = ?", (agent_id,))
+        if existing is not None:
+            if existing["pubkey"] == pubkey:
+                return dict(existing)
+            raise Conflict(
+                "this agent already registered a key; a principal that can change its key "
+                "on request can deny what it signed yesterday", reason="key_already_registered")
+        taken = self.store.one(
+            "select agent_id from comms_identities where pubkey = ?", (pubkey,))
+        if taken is not None:
+            raise Conflict("that key belongs to another agent", reason="pubkey_in_use",
+                           agent_id=taken["agent_id"])
+        agentid = agentid_for(pubkey)
+        with self.store.tx() as c:
+            c.execute(
+                """insert into comms_identities
+                   (agent_id, team_id, handle, pubkey, seckey, custody, relays, created_date)
+                   values (?,?,?,?,'','external','[]',?)""",
+                (agent_id, agent["team_id"], agent["name"], pubkey, now()),
+            )
+            c.execute("update agents set agentid = ?, updated_date = ? where id = ?",
+                      (agentid, now(), agent_id))
+        row = self.store.one("select * from comms_identities where agent_id = ?", (agent_id,))
+        return dict(row)
+
+    def verify_claim(self, agent_id: str, digest: str, signature: str) -> dict:
+        """does this signature belong to the key this worker registered."""
+        pubkey = self.public_key_of(agent_id)
+        if not pubkey or self.custody_of(agent_id) != "external":
+            return {"ok": False, "why": "no_registered_key"}
+        if verify_signature(signature, digest, pubkey):
+            return {"ok": True, "why": "", "pubkey": pubkey,
+                    "agentid": agentid_for(pubkey)}
+        return {"ok": False, "why": "signature_invalid"}
 
 
 # ---- checking a bundle without the database ----------------------------
@@ -229,7 +323,9 @@ def verify_entries(entries: list[dict]) -> dict:
         pubkey = entry.get("pubkey", "")
         signature = entry.get("sig", "")
         if pubkey and signature:
-            if not verify_signature(signature, recomputed, pubkey):
+            # a worker's signature covers the payload; ours covers the whole row
+            covers = payload_digest(payload_json) if entry.get("attests") == "payload" else recomputed
+            if not verify_signature(signature, covers, pubkey):
                 return {"ok": False, "entries": len(entries), "signed": signed,
                         "unsigned": unsigned, "broken_at_seq": None,
                         "broken_at_index": None, "bad_signature_at_seq": entry.get("seq")}
