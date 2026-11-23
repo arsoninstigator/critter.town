@@ -215,6 +215,23 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
+### crew templates, and the skeleton
+
+`GET /crews/{id}/template` answers a document: schema `crittertown.crew/1`, the crew's name,
+mission and review mode, each agent's name, role, kind, hosting, model, system prompt, skills
+and tools, the crew's rails by kind and value, and each skill as the SKILL.md it came from.
+
+`POST /crews/{id}/template` imports one, and `POST /crews/skeleton` creates a crew and
+imports the skeleton into it in a single call. `GET /templates/skeleton` reads the document
+without standing anything up.
+
+the refusals are the point. a document may not carry `scope` or `runtime`, so an imported
+crew cannot arrive with permissions or a credential; `egress_hosts` may not contain `*`; a
+rail may not name an agent that is not in the document; a rail kind outside the ten the
+platform sets is refused by name. the document also has to be staffable as written: an
+external worker cannot be hired as a reviewer, and a kind cannot fill a seat it never holds.
+every one of those is checked before a single row is written.
+
 ### the heartbeat: an agent we do not run
 
 `POST /agents/{id}/heartbeat` with `{key, ttl_seconds}` is how a worker built somewhere else asks

@@ -552,3 +552,27 @@ the foreign_refs rail is deliberately narrow. it refuses an answer that names a 
 another crew, and it does not try to judge whether the answer leaked the idea behind the card.
 a rail that guesses is a rail whose refusals have to be argued with at 3am, and the whole point
 of a guardrail over a gate is that nobody has to be awake for it.
+
+## a crew is a document, and the smallest one is two seats
+
+two things were missing and they turned out to be the same thing. a crew could not be handed
+to anybody, because it only existed as rows in one database, and a crew could not be started
+without answering eight questions first. a document fixes both: export what a crew knows and
+how it is staffed, import it into a new one, and ship a document that is already the answer
+to the eight questions.
+
+the document is deliberately smaller than the crew. it carries names, roles, kinds, models,
+prompts, skills, tools, and the rails. it does not carry the scope, because a template that
+ships permissions is not a template, it is a copy of somebody's authority with a new name on
+it, and it does not carry a credential for the same reason. a wildcard egress host is refused
+too: a wall a template can open is not a wall. the rule behind all three is that an import
+may narrow what a crew can reach and never widen it, so a refusal names the field instead of
+dropping it, since a dropped field reads as a promise the template kept.
+
+the skeleton is where that rule pays off. the obvious skeleton is one agent, and it is wrong,
+because the review gate refuses to let a seat sign off its own work: a crew of one works a
+card to review and stops there, and the first thing a person would conclude is that the
+platform is broken. the smallest crew that can finish a card is a doer and a reviewer, so the
+skeleton is those two, three rails and one skill that says how to close a card with the
+reference its kind asks for. `POST /crews/skeleton` is now the shortest honest answer to
+"how do i start".

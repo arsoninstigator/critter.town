@@ -357,6 +357,21 @@ calls itself, whenever it decides to: the browser, the sandbox, workflows for a 
 board. the difference is who decides the order. a workflow decides for a node; the agent
 decides for a service.
 
+### crew template
+
+a crew as a document. it carries what the crew knows and how it is staffed, and refuses to
+carry what it can reach: an exported scope, a credential or a wildcard egress host is
+refused at import rather than quietly dropped, because a field a template drops is a promise
+it made and broke. importing creates nothing until the whole document validates, so a
+template that fails on its third agent does not leave the first two hired.
+
+### skeleton crew
+
+the least a crew can be and still close a card here, which is two seats and not one: the
+review gate refuses to let a seat sign off its own work, so a crew of one reaches review and
+stops. the skeleton is a doer, a reviewer, three rails and one skill about closing a card
+with the reference its kind asks for. `POST /crews/skeleton` stands one up in a call.
+
 ### output rail
 
 the only rail that runs after the model has spoken. every other one answers before the work:

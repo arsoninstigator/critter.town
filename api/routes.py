@@ -38,6 +38,7 @@ from agents.agent_imports import AGENT_SOURCES, adopt, export_agent, import_agen
 from agents.context import SLICES
 from work.liveness import violations
 from work import roster as formation
+from work import templates as templates_module
 from work import topology
 from core.app import App, build_app
 from comms.events import Event
@@ -301,6 +302,30 @@ def create_api(app: App | None = None) -> FastAPI:
     @api.get("/crews/{team_id}/rail-refusals")
     def rail_refusals(team_id: str, limit: int = Query(50)) -> dict:
         return {"refusals": app.guardrails.refusals(team_id, limit=limit)}
+
+    # ---- crew templates -------------------------------------------------
+    # a crew as a document: out for handing over, in for standing one up, and the skeleton
+    # for the question "what is the least a crew can be".
+    @api.get("/crews/{team_id}/template")
+    def export_template(team_id: str) -> dict:
+        return app.templates.export(team_id)
+
+    @api.post("/crews/{team_id}/template")
+    def import_template(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        doc = data.get("template") if isinstance(data.get("template"), dict) else data
+        return app.templates.import_document(team_id, doc, actor=str(data.get("actor", "owner")))
+
+    @api.get("/templates/skeleton")
+    def read_skeleton(name: str = Query("skeleton")) -> dict:
+        return templates_module.skeleton(name)
+
+    @api.post("/crews/skeleton")
+    def stand_up_skeleton(payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        doc = data.get("template") if isinstance(data.get("template"), dict) else None
+        return app.templates.stand_up(str(data.get("name") or "skeleton"), doc=doc,
+                                      actor=str(data.get("actor", "owner")))
 
     # ---- skills ---------------------------------------------------------
     # a skill is a SKILL.md: a name, a description that says when to use it, and a body.

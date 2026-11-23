@@ -59,6 +59,7 @@ from work.dispatch import DispatchService
 from work.replenish import ReplenishService
 from work.heartbeat import HeartbeatService
 from work.skills import SkillService
+from work.templates import TemplateService
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -122,6 +123,8 @@ class App:
     heartbeat: HeartbeatService
     # know-how an agent can carry, loaded in three stages rather than all at once
     skills: SkillService
+    # a crew as a document, so one can be handed over or stood up in a call
+    templates: TemplateService
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -351,6 +354,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     skills = SkillService(store, crews=crews)
     context = ContextSlicer(store, crews=crews, kanban=kanban, intent=intent,
                             knowledge=knowledge, profile=profile, a2a=a2a, skills=skills)
+    # a crew as a document: export, import, and the smallest crew that can close a card
+    templates = TemplateService(store, crews=crews, guardrails=guardrails, skills=skills)
     runner.context = context
 
     kanban.events_hook = emit
@@ -415,6 +420,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         silence=silence,
         heartbeat=heartbeat,
         skills=skills,
+        templates=templates,
         polls=polls,
         browsers=browsers,
         ops=ops,
