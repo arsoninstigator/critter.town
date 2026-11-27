@@ -701,3 +701,19 @@ and a small thing the test caught: crewai keeps the agent's identity in `role`, 
 prose, so the imported prompt had a backstory and a goal but never said who the agent was.
 `## role` now leads the prompt. a test written against a real file finds that in a way no
 test written against our own shape would.
+
+## the tool ships a skill about itself
+
+pad ships an agent skill beside its CLI and web ui, and that is the one thing worth taking
+from it. our board has a REST surface, a custody lease, an evidence gate and a crew stream,
+and an agent learns all four by being refused at them. a skill is cheaper than four
+refusals and arrives before the mistake.
+
+so `using-the-board` ships in `work/templates.py` as text, alongside `closing-a-card`, and
+`POST /crews/{id}/skills/shipped` installs it. three rules held. it goes through the same
+validator a written skill meets, so the shipped one cannot be the file that skips the
+rules. it names what the code actually accepts (the six columns, the schemes per kind, the
+gate), and a test reads the columns from the board rather than trusting the prose. and it
+carries no paths or route strings, because a skill that names `/tasks/{id}/claim` is a
+skill that goes stale the first time a route moves, and the agent then believes a 404 is a
+refusal.

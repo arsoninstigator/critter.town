@@ -82,6 +82,57 @@ moving it and explaining afterwards.
 """
 
 
+BOARD_SKILL = """---
+name: using-the-board
+description: how to take a card, do it and close it without breaking the gate. use when you are about to pick up work from the board, move a card, or wonder why a move was refused.
+---
+
+# using the board
+
+the board is the work. a card you did not claim is not yours, and a card you moved
+without its reference is not done.
+
+## taking work
+
+claim the card before you start. claiming sets a lease, and the lease is what tells the
+rest of the crew the card is being worked rather than forgotten. renew while you work,
+and if you cannot finish, release it with what you learned instead of leaving it held.
+
+a card in `ready` is offered, not assigned. a card in `in_progress` is somebody's.
+
+## moving
+
+`backlog` -> `ready` -> `in_progress` -> `review` -> `done`, and `blocked` from anywhere
+with a reason. there is no short way from `in_progress` to `done`: the gate is the point,
+and it refuses your own signature on your own work.
+
+## evidence
+
+the kind of the card decides which reference closes it. code wants `commit:<sha>` or
+`run:<id>`. research wants `sheet:`, `sql:`, `source:` or `chart:`. financial wants
+`stripe:`, `payout:` or `invoice:`. support wants `ticket:`. doc wants `url:` or
+`artifact:`. a sentence is not evidence and never has been: `scheme:payload` is.
+
+a `gate:<id>` closes any kind, because a recorded human decision is a row with who, when
+and why in it.
+
+## when you cannot
+
+block it with the reason, not with silence. if the card is too big, break it down and let
+the parts inherit its budget and slice. if the answer lives in another crew, that is a
+crossing, and a crossing has to be declared before the message is sent. if you need a
+person, ask in basecamp and say what you need decided.
+
+## what the trail remembers
+
+every move is a row in the crew's stream, in the order it happened, signed by whoever
+made it. that is why a card is not moved twice to see what happens.
+"""
+
+
+SHIPPED_SKILLS = (SKELETON_SKILL, BOARD_SKILL)
+
+
 def validate(doc: Any) -> dict:
     """what a document must be before anything is created from it."""
     if not isinstance(doc, dict):
@@ -148,7 +199,7 @@ def skeleton(name: str = "skeleton") -> dict:
         "mission": "the least a crew can be and still finish a card here.",
         "agents": [dict(agent) for agent in SKELETON_AGENTS],
         "rails": [dict(rail) for rail in SKELETON_RAILS],
-        "skills": [SKELETON_SKILL],
+        "skills": list(SHIPPED_SKILLS),
     })
 
 

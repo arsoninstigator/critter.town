@@ -38,12 +38,13 @@ from agents.agent_imports import AGENT_SOURCES, adopt, export_agent, import_agen
 from agents.context import SLICES
 from work.liveness import violations
 from work import roster as formation
+from work import skills as skills_module
 from work import templates as templates_module
 from manage import attest
 from work import topology
 from core.app import App, build_app
 from comms.events import Event
-from core.errors import CritterTownError, NotFound, ValidationError
+from core.errors import Conflict, CritterTownError, NotFound, ValidationError
 from agents.importers import SOURCES, import_workflow
 from manage.knowledge.base import KINDS as KNOWLEDGE_KINDS
 from manage.knowledge.service import ADAPTERS
@@ -391,6 +392,37 @@ def create_api(app: App | None = None) -> FastAPI:
             origin=str(data.get("origin") or "authored"),
             source=str(data.get("source") or ""),
         )
+
+    # the skills the tool ships, so a crew can be taught how to use the tool without
+    # being re-imported. pad's lesson: a board with a REST surface and no skill telling
+    # an agent how to drive it is a board agents use badly.
+    @api.get("/skills/shipped")
+    def shipped_skills() -> dict:
+        out = []
+        for text in templates_module.SHIPPED_SKILLS:
+            parsed = skills_module.validate(skills_module.parse_skill_md(text))
+            out.append({"name": parsed["name"], "description": parsed["description"],
+                        "body": parsed["body"], "text": text})
+        return {"skills": out}
+
+    @api.post("/crews/{team_id}/skills/shipped")
+    def install_shipped_skill(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        wanted = str(data.get("name") or "").strip()
+        for text in templates_module.SHIPPED_SKILLS:
+            parsed = skills_module.validate(skills_module.parse_skill_md(text))
+            if parsed["name"] != wanted:
+                continue
+            taken = {s["name"] for s in app.skills.list(team_id, include_disabled=True)}
+            if wanted in taken:
+                raise Conflict(f"this crew already has a skill called '{wanted}'",
+                               reason="skill_already_installed")
+            return app.skills.create(team_id, text, origin="shipped")
+        raise ValidationError(f"no shipped skill is called '{wanted}'",
+                              reason="unknown_shipped_skill",
+                              available=[skills_module.validate(
+                                  skills_module.parse_skill_md(s))["name"]
+                                  for s in templates_module.SHIPPED_SKILLS])
 
     @api.get("/crews/{team_id}/skills")
     def list_skills(team_id: str, include_disabled: bool = Query(False),

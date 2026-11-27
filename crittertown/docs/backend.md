@@ -215,7 +215,17 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
-### importing an agent from another framework
+### the skills the tool ships
+
+`GET /skills/shipped` lists the SKILL.md the tool carries about itself, and
+`POST /crews/{id}/skills/shipped` with `{"name": "using-the-board"}` installs one into a
+crew (409 when the crew already has it, 422 naming the alternatives when the name is not
+shipped). the skeleton crew carries both. the point is not documentation: a board with a
+REST surface and no skill telling an agent how to drive it is a board agents use badly,
+and the skill is validated by the same rules as a written one, so it cannot be the file
+that quietly breaks them.
+
+## importing an agent from another framework
 
 `agents/agent_imports.py` reads six sources into one manifest: claude-code, openclaw,
 crewai, a2a, an openai assistant object and our own export. two rules hold across all of

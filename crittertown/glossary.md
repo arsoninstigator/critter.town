@@ -367,6 +367,14 @@ that makes it a claim: it composes every agent's context and every body of reach
 looks for the criteria in them, so a slice added later that happens to carry one fails there
 instead of quietly making the next metric meaningless.
 
+### shipped skill
+
+a SKILL.md the tool carries about itself, installed into a crew on request rather than
+authored per crew. `using-the-board` teaches an agent the columns, the evidence schemes,
+the claim and the gate; `closing-a-card` teaches what reference closes what. they live in
+`work/templates.py` as text and meet the same validator a hand-written skill meets, so a
+shipped skill cannot be the one that skips the rules.
+
 ### crew stream
 
 the crew's own order, as a chain. every audit row carries `team_seq`, `team_prev` and

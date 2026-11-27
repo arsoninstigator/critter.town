@@ -109,7 +109,9 @@ class StandUpTests(AppCase):
         self.assertEqual([a["name"] for a in out["agents"]], ["doer", "reviewer"])
         self.assertEqual([r["kind"] for r in out["rails"]],
                          ["open_cards", "spend_per_day", "forbidden_tools"])
-        self.assertEqual([s["name"] for s in out["skills"]], ["closing-a-card"])
+        # the skeleton ships two skills now: closing a card, and how to use the board
+        self.assertEqual([s["name"] for s in out["skills"]],
+                         ["closing-a-card", "using-the-board"])
 
     def test_a_skeleton_crew_can_close_a_card(self):
         out = self.app.templates.stand_up("starter")
@@ -144,7 +146,8 @@ class RoundTripTests(AppCase):
         second = self.app.templates.stand_up("copy", doc=doc)
         self.assertEqual([a["name"] for a in second["agents"]], ["doer", "reviewer"])
         self.assertEqual(len(second["rails"]), len(doc["rails"]))
-        self.assertEqual([s["name"] for s in second["skills"]], ["closing-a-card"])
+        self.assertEqual([s["name"] for s in second["skills"]],
+                         ["closing-a-card", "using-the-board"])
 
     def test_an_export_does_not_carry_permissions(self):
         first = self.app.templates.stand_up("starter")
