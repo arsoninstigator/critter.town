@@ -54,6 +54,7 @@ from work.custody import Custody
 from work.liveness import Liveness
 from work.wake import WakeQueue
 from work.witness import Witness
+from work.lineage import Lineage
 from manage.waivers import Waiver
 from work.evals import EvalService
 from work.convergence import ConvergenceService
@@ -114,6 +115,7 @@ class App:
     custody: Custody
     wakes: WakeQueue
     witness: Witness
+    lineage: Lineage
     waivers: Waiver
     liveness: Liveness
     evals: EvalService
@@ -273,6 +275,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # what a run was made from, hashed, so a card cannot close against a premise that moved
     witness = Witness(store, kanban=kanban, knowledge=knowledge)
     runner.witness = witness
+    runner.audit = audit
     # a beat a card did not walk is written down, or the card does not leave review
     waivers = Waiver(store)
     kanban.waivers = waivers
@@ -283,6 +286,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     convergence = ConvergenceService(store, kanban=kanban)
     runner.convergence = convergence
     kanban.convergence = convergence
+    # a card whose parent never landed inherits that, instead of burning an attempt on a
+    # premise that does not exist yet
+    lineage = Lineage(store, kanban, convergence=convergence)
+    runner.lineage = lineage
     # delegation is the handoff and the breakdown: who owes the work, and which
     # parts of a split have nobody on them
     delegation = DelegationService(store, crews=crews, kanban=kanban,
@@ -438,6 +445,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         custody=custody,
         wakes=wakes,
         witness=witness,
+        lineage=lineage,
         waivers=waivers,
         liveness=liveness,
         evals=evals,

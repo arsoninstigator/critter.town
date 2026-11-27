@@ -81,6 +81,11 @@ class CrewRunner:
         self.wakes = None
         # set by the composition root: what the run was handed, hashed, so drift is visible
         self.witness = None
+        # set by the composition root: a card whose ancestor is blocked inherits that
+        # rather than spending an attempt on a premise that does not exist yet
+        self.lineage = None
+        # set by the composition root: an inherited failure is a decision worth a row
+        self.audit = None
         self.crews = CrewService(store, registry)
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
@@ -191,6 +196,13 @@ class CrewRunner:
                 {"agent_id": agent["id"], "tools": agent.get("tools") or []},
                 task=task,
             )
+        # a card is not judged on its own when its parent never landed. the chain is read
+        # before a lease, a reservation or an attempt is spent, because a child of a blocked
+        # card has no premise to work from and would fail for its parent's reason
+        if self.lineage is not None:
+            inherited = self.lineage.for_dispatch(task)
+            if inherited["decision"] != "run":
+                return self._inherited(task, agent, inherited)
         # the seat's mandate is read against the card it is about to carry. this records
         # a finding and never stops the work: a false positive on a word must not cost a
         # dispatch, and a pattern across cards is the thing worth seeing
@@ -480,6 +492,45 @@ class CrewRunner:
             self.profile.retire_sidecars(task_id)
         except CritterTownError:
             pass
+
+    def _inherited(self, task: dict, agent: dict, verdict: dict) -> dict:
+        """the child of a card that never landed: parked, or left waiting on a person.
+
+        no attempt is spent and no lease is taken, because neither belongs to this card: the
+        failure is the ancestor's, and charging it twice is how one broken step reads as
+        five.
+        """
+        from work.lineage import park
+
+        task_id = task["id"]
+        if verdict["decision"] == "inherit_blocked":
+            note = park(task, verdict)
+            try:
+                self.kanban.move(task_id, "blocked", "system")
+            except CritterTownError:
+                pass
+            # the reason is written on the row, not only in the event: a blocked card that
+            # cannot say what blocked it is the silence this whole unit is about
+            with self.store.tx() as c:
+                c.execute("update tasks set blocked_reason = ? where id = ?", (note, task_id))
+            task = self.kanban.get_task(task_id)
+        if self.audit is not None:
+            self.audit.record_event("task.inherited_failure", {
+                "team_id": task["team_id"], "agent_id": agent["id"], "task": task,
+                "data": {"task_id": task_id, "decision": verdict["decision"],
+                         "reason": verdict["reason"], "ancestor": verdict["ancestor"]},
+            })
+        return {
+            "run_id": "",
+            "task": task,
+            "agent": {"id": agent["id"], "name": agent["name"]},
+            "decision": verdict["decision"],
+            "reason": verdict["reason"],
+            "ancestor": verdict["ancestor"],
+            "steps": [],
+            "result": {},
+            "error": "",
+        }
 
     def _environment_blocked(self, task: dict, agent: dict, exc: CritterTownError,
                              wake: dict | None, reservation: dict | None) -> dict:

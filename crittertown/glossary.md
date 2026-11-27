@@ -141,6 +141,15 @@ the cards and writes an audit row. `mode: sync` means the whole rotation works t
 together, so nobody has to accept; `mode: async` is one owner per slot with a real
 handoff.
 
+### inherited failure
+a card whose ancestor never landed. a blocked parent leaves its children in `ready`, where
+each one is picked up and spends an attempt against a premise that does not exist yet, so one
+broken step reads as five independent failures. the chain is read before the work is: a
+blocked ancestor parks the child in `blocked` naming it, an ancestor in review defers the
+child where it stands, and neither spends an attempt or takes a lease. `GET
+/cards/{id}/lineage` is one chain, `GET /crews/{id}/lineage` the subtree a block has taken
+out.
+
 ### profile
 every agent carries its own namespaces: `skills`, `scope`, `memory`, `instructions`,
 `knowledge`, `perms`, `tools`, `vertical`, `spawn`, `connectors`. all of it is rows keyed

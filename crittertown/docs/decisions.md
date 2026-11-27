@@ -846,3 +846,20 @@ reason has a floor, because "n/a" is the silence with a word in it.
 the env block answers the third by separating the room from the work. the alternative was to
 treat a dead provider as a runtime failure, which is what the old code did and what made an
 outage look like three bad attempts on a good card.
+
+## a failure is charged to the card that owns it
+
+band's factory charges a stage that did not start to every stage above it, which is the same
+insight from the other end of the pipe: one broken step should read as one failure. here the
+children of a blocked card were picked up one by one, each spending an attempt against a
+premise that did not exist, and the board ended up with five blocked cards where one card had
+the problem.
+
+the chain is read before the work is. what made this cheap is that nothing new has to be
+stored: `parent_id` already says who the parent is, and `blocked_reason` already has a column
+to say why. what made it necessary is the attempt counter, which is the one number a crew is
+judged on, and it was being spent on other cards' failures.
+
+the alternative we rejected was leaving the children in `ready` and letting the dispatcher
+notice at failure time. by then the lease is taken, the reservation is held, the run row
+exists and the attempt is spent, so the child has already been charged for its parent.

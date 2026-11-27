@@ -476,6 +476,17 @@ def create_api(app: App | None = None) -> FastAPI:
         app.crews.get_team(team_id)
         return {"waivers": app.waivers.for_crew(team_id, limit=limit)}
 
+    # a card whose parent never landed is not a card that failed: the chain is read before
+    # the work is, so one broken step does not read as five
+    @api.get("/cards/{task_id}/lineage")
+    def card_lineage(task_id: str) -> dict:
+        return app.lineage.of(app.kanban.get_task(task_id))
+
+    @api.get("/crews/{team_id}/lineage")
+    def crew_lineage(team_id: str, limit: int = Query(200)) -> dict:
+        app.crews.get_team(team_id)
+        return app.lineage.inherited(team_id, limit=limit)
+
     # a wake is a reason for a card to be worked. raising one records the reason before
     # anything acts on it, so a trigger that fires while another agent holds the card is
     # joined or kept rather than lost

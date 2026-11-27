@@ -562,3 +562,25 @@ count different things.
 
 the schema is 29: `witnesses` (team, task, run, kind, ref, digest, chars) and `waivers`
 (team, task, beat, reason, waived_by), plus `tasks.env_blocks`.
+
+## an inherited failure is not the child's failure
+
+`work/lineage.py` walks `parent_id` with a limit of 12 and a visited set, so a row that names
+itself as its own ancestor is reported as `cycle` rather than walked forever. `decide(parents)`
+is a first-match table over the chain, nearest first: `blocked` gives `inherit_blocked`, a
+parent in `review` gives `defer`, anything else runs. backlog is deliberately absent, because
+a child queued ahead of an unscheduled parent is a scheduling mistake and parking the child
+would hide it.
+
+the runner reads the chain before a lease, a reservation or an attempt is spent. an inherited
+block moves the child to `blocked` with `blocked_reason` written on the row (move() only
+carries a note into review, so the reason is written beside it), records one
+`task.inherited_failure` audit row naming the ancestor, and returns `decision:
+inherit_blocked` with `run_id: ""`. a deferral changes nothing on the card and returns
+`decision: defer`, so a person answering the parent is the only thing that moves the child.
+
+routes: `GET /cards/{id}/lineage` returns the chain, `cycle` and the decision; `GET
+/crews/{id}/lineage` returns the cards a block has taken out, split into `blocked` and
+`deferred`, with the ancestor named on each.
+
+no schema change: the chain is already `tasks.parent_id`, and the reason already has a column.

@@ -600,7 +600,7 @@ class AuditService:
         if event in {"guardrail.set", "guardrail.retired", "guardrail.refused",
                      "lesson.proposed", "lesson.approved", "lesson.rejected",
                      "lesson.promoted", "knowledge.recorded", "knowledge.updated",
-                     "mandate.overfit"}:
+                     "mandate.overfit", "task.inherited_failure"}:
             agent_id = agent_of(context.get("agent_id"))
             if not agent_id:
                 return None
