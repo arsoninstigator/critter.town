@@ -139,6 +139,23 @@ opens a gate with signed single-use tokens; the paper trail is the row, the ques
 travels to the crew channel, and one tap on the link decides it. links expire, are bound
 to one decision, and are refused after use. tables: `gates`, `gate_tokens`.
 
+### posture
+what a crew can reach, read off its own rows: the hosts its egress rails allow, the credentials the
+broker issued, the connectors it reads, the channels it speaks in, the skills it can load and which
+seats are run by somebody else. it is a reading and not a document, because "what can this crew
+reach" answered from memory is a claim.
+
+### finding
+one rule read over the posture inventory, keyed `rule:subject` so it survives a recompute. a finding
+has a severity from info to critical, a sentence saying what it is, and a remedy. findings are
+recomputed every time rather than stored, because a stored finding is a claim about a world that has
+since moved.
+
+### risk acceptance
+a finding a named person has accepted, with a reason and a date it stops applying. a lapsed
+acceptance comes back as a finding that names whoever gave it and when it ran out, because the
+second decision is theirs. acceptance with no date is a decision nobody revisits.
+
 ### kind
 what sort of work a card is: code, design, research, security, financial, media, ops,
 accounting, support, doc. it is the axis the board was missing, because every gate and

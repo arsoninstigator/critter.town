@@ -419,6 +419,37 @@ def create_api(app: App | None = None) -> FastAPI:
     def card_statements(task_id: str) -> dict:
         return app.ledger.for_card(task_id)
 
+    # what the crew can reach, read off its own rows, and the risks a person accepted with a date
+    @api.get("/crews/{team_id}/posture")
+    def crew_posture(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.posture.reading(team_id)
+
+    @api.get("/crews/{team_id}/posture/inventory")
+    def crew_inventory(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.posture.inventory(team_id)
+
+    @api.get("/crews/{team_id}/posture/findings")
+    def crew_findings(team_id: str, severity: str | None = Query(None)) -> dict:
+        app.crews.get_team(team_id)
+        found = app.posture.findings(team_id)
+        if severity:
+            found = [f for f in found if f["severity"] == severity]
+        return {"team_id": team_id, "count": len(found), "findings": found}
+
+    @api.post("/crews/{team_id}/posture/dismiss")
+    def dismiss_finding(team_id: str, body: dict) -> dict:
+        app.crews.get_team(team_id)
+        return app.posture.dismiss(team_id, body.get("key", ""), body.get("owner", ""),
+                                   body.get("reason", ""), body.get("until", 0))
+
+    @api.get("/crews/{team_id}/posture/dismissals")
+    def crew_dismissals(team_id: str, include_expired: bool = Query(True)) -> dict:
+        app.crews.get_team(team_id)
+        rows = app.posture.dismissals(team_id, include_expired=include_expired)
+        return {"team_id": team_id, "count": len(rows), "dismissals": rows}
+
     # a card of a given kind owes something before it may move, and an open question is a
     # record with an asker rather than a comment somebody has to remember
     @api.post("/cards/{task_id}/questions")

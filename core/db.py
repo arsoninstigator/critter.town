@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 
 SCHEMA = """
 create table if not exists meta (
@@ -876,6 +876,21 @@ create table if not exists readable_checks (
 );
 create index if not exists readable_checks_crew on readable_checks (team_id, created_date);
 create index if not exists readable_checks_run on readable_checks (run_id);
+
+-- v34: a risk a person accepted, until a moment they named. a dismissal is not a deletion: the
+-- finding is recomputed from rows every time, and a lapsed acceptance comes back naming whoever
+-- gave it, because the second decision is theirs.
+create table if not exists posture_dismissals (
+    id text primary key,
+    team_id text not null,
+    finding_key text not null,
+    severity text not null default 'low',
+    owner text not null,
+    reason text not null,
+    until_date real not null,
+    created_date real not null
+);
+create index if not exists posture_dismissals_crew on posture_dismissals (team_id, finding_key);
 
 -- v33: what a card of a given kind owes before it may move, and the questions it still has open.
 -- an open question is a record rather than a comment: it has an asker, it has an answer or a

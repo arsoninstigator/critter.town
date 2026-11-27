@@ -87,6 +87,9 @@ class CrewRunner:
         # before the work starts, because a claim that disagrees with another is cheaper to
         # settle than to build on
         self.ledger = None
+        # set by the composition root: what the crew can reach, and the risks it has accepted.
+        # recorded on the run, and only a stated threshold turns a finding into a refusal
+        self.posture = None
         # set by the composition root: a card whose ancestor is blocked inherits that
         # rather than spending an attempt on a premise that does not exist yet
         self.lineage = None
@@ -222,6 +225,11 @@ class CrewRunner:
         ledger_check: dict = {}
         if self.ledger is not None:
             ledger_check = self.ledger.for_dispatch(task, agent)
+        # a crew that has stated what blocks gets a refusal here, before a lease or a token is
+        # spent. a crew that has not gets a reading on the run and no surprise
+        posture_check: dict = {}
+        if self.posture is not None:
+            posture_check = self.posture.check_dispatch(task, agent)
         # a card may declare the shape it wants, and the one refusal is a card that
         # asks for orchestration its own signals do not justify: that shape costs seats,
         # tokens and a convergence, and it is what a big-feeling task asks for
@@ -451,6 +459,9 @@ class CrewRunner:
             "readable": {"signals": readable_reading.get("signals", 0),
                          "unprovisioned": bool(readable_reading.get("unprovisioned")),
                          "why": (readable_reading.get("why") or [])[:10]},
+            "posture": {"verdict": posture_check.get("verdict", "unset"),
+                        "block_at": posture_check.get("block_at"),
+                        "findings": posture_check.get("findings", 0)},
             "ledger": {"verdict": ledger_check.get("verdict", "clear"),
                        "contested": ledger_check.get("contested") or [],
                        "found": [row["id"] for row in ledger_check.get("found") or []]},

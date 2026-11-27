@@ -1000,3 +1000,19 @@ the partial merge is the other half of the decision: a crew that tightened `code
 loosen `research`, so a stated table replaces the kinds it names and leaves the rest of the default
 standing. a policy language where every edit is a full rewrite is a policy language people stop
 editing.
+
+## a posture is a reading, and an acceptance has a date on it
+
+the alternative to reading posture off rows is writing it down, and a written posture is a claim
+about a world that has since moved. so findings are recomputed from the crew's own tables on every
+call, keyed `rule:subject` so a decision attaches to the thing rather than to a position in a list.
+
+a dismissal expires, and that is the whole point of having them. risk acceptance without a date is a
+decision nobody revisits, so `until` is required, and a lapsed acceptance comes back to the open list
+carrying the name of whoever gave it and the moment it ran out. it is not a punishment and it is not
+a fresh finding: it is the same decision, now due again, in front of the person who made it.
+
+nothing here stops a dispatch unless the crew said so. a crew states `posture.block_at` and then
+findings at or above that severity refuse the work before a lease or a token is spent; a crew that
+has stated nothing gets a reading on the run and no surprise. a gate that appears without being
+asked for reads as a bug, and the same reasoning that made phase checks opt-in applies here.

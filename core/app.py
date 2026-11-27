@@ -71,6 +71,7 @@ from work.holdout import HoldoutService
 from work.ledger import Ledger
 from work.readable import Readable
 from work.phases import Phases
+from work.posture import Posture
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -148,6 +149,7 @@ class App:
     ledger: Ledger
     readable: Readable
     phases: Phases
+    posture: Posture
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -293,6 +295,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # an operational task owes only the second
     phases = Phases(store, kanban=kanban, audit=audit)
     kanban.phases = phases
+    # what the crew can reach, read off its own rows, and the risks a person has accepted with a
+    # date on them. a crew that states what blocks gets a refusal at dispatch
+    posture = Posture(store, crews=crews, audit=audit)
+    runner.posture = posture
     # an eval reads the crew and the same model the runner uses, so a candidate is
     # measured against the prompt the crew would actually send
     evals = EvalService(store, crews=crews, model=runner.model)
@@ -496,6 +502,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         ledger=ledger,
         readable=readable,
         phases=phases,
+        posture=posture,
         polls=polls,
         browsers=browsers,
         ops=ops,

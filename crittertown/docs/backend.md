@@ -766,3 +766,30 @@ not have.
 routes: `POST|GET /cards/{id}/questions`, `POST /questions/{id}/answer`, `POST /questions/{id}/drop`,
 `GET /crews/{id}/questions`, `GET /cards/{id}/readiness?to=`, `POST|GET /cards/{id}/phase-waivers`.
 schema 33 adds `questions` and `phase_waivers`.
+
+## what a crew can reach, and who accepted the risk
+
+`work/posture.py` reads a crew's posture off rows. `inventory(team_id)` gathers active `guardrails`
+of kind `egress_hosts` (with who each host was granted to), active `credential_broker` rows (labels
+and scopes, never values), `connectors`, `channels`, `skills` and non-retired `agents`, plus counts
+including external seats.
+
+`findings(team_id)` reads a fixed rule set over that inventory: `egress_unbounded` (a rail allowing
+every host, high), `egress_wildcard` (medium), `secret_expired` (high), `secret_expiring` (low),
+`secret_unscoped` and `secret_wide` (medium), `external_seat` (an external agent holding a review
+role, high) versus `external_agent` (info), `connector_down` (low), `skill_open_tools` (medium) and
+`no_egress_declared` (info). keys are `rule:subject`, findings are sorted heaviest first, and nothing
+is stored: the reading is recomputed from rows each time.
+
+`dismiss` records a `posture_dismissals` row and requires a key that matches an open finding, a
+named owner, a reason and a future `until`. `reading` splits findings into open and accepted, and a
+lapsed acceptance returns to the open list carrying `lapsed` with the owner and the date, so the
+second decision is visibly the same person's.
+
+`orchestration.posture.block_at` is the crew's threshold. unset means findings never stop work and
+the run records `posture.verdict = "unset"`; set means `check_dispatch` raises a `Conflict` naming
+the first blocking finding before a lease or a token is spent.
+
+routes: `GET /crews/{id}/posture`, `GET /crews/{id}/posture/inventory`,
+`GET /crews/{id}/posture/findings?severity=`, `POST /crews/{id}/posture/dismiss`,
+`GET /crews/{id}/posture/dismissals?include_expired=`. schema 34 adds `posture_dismissals`.
