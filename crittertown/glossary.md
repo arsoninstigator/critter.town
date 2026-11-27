@@ -144,6 +144,19 @@ what sort of work a card is: code, design, research, security, financial, media,
 accounting, support, doc. it is the axis the board was missing, because every gate and
 every acceptance rule had been written for code and silently applied to a deal.
 
+### round
+one rejection and the work that answered it. a rejection is a move out of review that is not a
+move to done; the round it opens closes at the next move into review or done, and stays `open`
+until something answers it. each round says which fields actually changed, what the rework cost,
+and who did it, so "review said no three times" becomes three rows with a difference attached.
+
+### silent rejection
+a round that closed with nothing changed on the card. the field may have been rewritten to the
+value it already held, which is why the board fingerprints every edited field: an edit that
+moved no text is a round trip that cost a cycle and taught nobody anything. a round whose edit
+had no earlier fingerprint to compare against is `unproven` instead, because calling that a
+rubber stamp would be inventing a fact.
+
 ### gap
 the distance between the acceptance examples a crew could read and the sealed scenarios it
 could not: `public rate - sealed rate`. a positive gap is fitting, because the crew did the

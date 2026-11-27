@@ -11,6 +11,9 @@ it never did, and a `review` column is a gate, not decoration.
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 from core.db import Store, dumps, loads, new_id, now
 
 # a card that enters work carries its own deadlines, so "this should have moved by
@@ -22,6 +25,13 @@ from core.errors import NotAllowed, NotFound, ValidationError
 from manage import waivers as waiver
 from work import convergence
 from work.evidence import KINDS, evidence_fits, expected
+
+def _field_digest(value) -> str:
+    """one edited field's fingerprint. short on purpose: this is a comparison, not a secret."""
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                           default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
 
 def patch_for(column: str, ts: float) -> dict:
     """the deadlines a column implies.
@@ -114,7 +124,13 @@ class KanbanService:
                     dumps(payload or {}), channel_id, deadline, deadline, kind, ts, ts,
                 ),
             )
-        self._event(task_id, "created", "system", {"column": column, "title": title})
+        # the card records what it was born as, fingerprints included, so the first edit after a
+        # rejection can be compared against real content instead of being taken on trust
+        born = {"title": title, "description": description, "priority": int(priority),
+                "required_skills": dumps(required_skills or []), "payload": dumps(payload or {})}
+        self._event(task_id, "created", "system", {
+            "column": column, "title": title,
+            "digests": {name: _field_digest(value) for name, value in born.items()}})
         return self.get_task(task_id)
 
     def get_task(self, task_id: str) -> dict:
@@ -404,7 +420,11 @@ class KanbanService:
         with self.store.tx() as c:
             c.execute(f"update tasks set {columns}, updated_date = ? where id = ?",
                       tuple(patch.values()) + (now(), task_id))
-        self._event(task_id, "edited", actor, {"fields": sorted(patch)})
+        # a digest per field, so "this was edited" can be told apart from "this changed": a
+        # rejection answered by rewriting a field to the value it already had changed nothing,
+        # and a board that cannot tell those apart cannot say whether review did any work
+        digests = {name: _field_digest(value) for name, value in patch.items()}
+        self._event(task_id, "edited", actor, {"fields": sorted(patch), "digests": digests})
         return self.get_task(task_id)
 
     def assign(self, task_id: str, agent_id: str | None, actor: str = "system") -> dict:

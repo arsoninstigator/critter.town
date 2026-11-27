@@ -646,3 +646,32 @@ tainted run by name.
 
 routes: `GET|POST /crews/{id}/holdout/public`, `POST|GET /crews/{id}/holdout/gap`,
 `GET /crews/{id}/holdout/acceptance`. schema 30 adds `holdout_public` and `holdout_gaps`.
+
+## where a card's work went, and what a rejection changed
+
+volume hides both halves. `work/distribution.py` reads one card's events, runs and settled
+reservations and answers two questions: how the work was split across the people who did it, and
+what each rejection actually changed.
+
+`rounds(events)` is pure. it walks the card's events in order, opens a round at every move out of
+review that is not a move to done, and closes it at the next move into review or done. inside a
+round, an `edited` event is compared field by field against the fingerprint that field held
+before, so a field rewritten to the same value counts as nothing. the card's own `created` event
+carries fingerprints too, so the first fix after a rejection is provable instead of assumed. a
+field with no earlier fingerprint lands in `assumed`, and a round with nothing proven but an edit
+is `unproven`, not silent: the honest answer there is that it cannot be judged.
+
+`share(units)` is pure too. turns come from the steps a run recorded, spend from settled
+reservations, and spend with no agent on it is reported as `unattributed_cents` rather than split
+evenly, since an even split invents a fact about who did the work. `concentrated` is true when one
+agent holds at least three quarters of the turns on a card that more than one agent touched.
+
+`summarise` counts rejections, answered rounds, reworked, silent and unproven, and reports
+`silent_share` over the rounds that could be judged, leaving unproven ones out of both sides.
+
+`DistributionService.for_card(task_id)` returns the split, the rounds (each with what the rework
+cost, measured from the rejection to its answer), and the summary. `for_crew(team_id, since,
+until)` adds the two lists a person should open first: `silent_rejections` and `concentrated`.
+
+routes: `GET /crews/{id}/distribution?days=7&limit=50` and `GET /cards/{id}/distribution`. the
+board's `created` and `edited` events carry a per-field digest; nothing else changed shape.

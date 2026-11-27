@@ -538,6 +538,20 @@ def create_api(app: App | None = None) -> FastAPI:
     def card_efficiency(task_id: str) -> dict:
         return app.efficiency.for_card(task_id)
 
+    # where a card's work went, and what a rejection changed on it. a rejection answered by
+    # rewriting a field to what it already said is a round trip that taught nobody anything
+    @api.get("/crews/{team_id}/distribution")
+    def crew_distribution(team_id: str, days: float = Query(7),
+                          limit: int = Query(50)) -> dict:
+        app.crews.get_team(team_id)
+        until = now()
+        return app.distribution.for_crew(team_id, since=until - days * 86400.0, until=until,
+                                         limit=limit)
+
+    @api.get("/cards/{task_id}/distribution")
+    def card_distribution(task_id: str) -> dict:
+        return app.distribution.for_card(task_id)
+
     # a wake is a reason for a card to be worked. raising one records the reason before
     # anything acts on it, so a trigger that fires while another agent holds the card is
     # joined or kept rather than lost

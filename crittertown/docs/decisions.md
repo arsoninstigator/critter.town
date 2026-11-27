@@ -909,3 +909,20 @@ answers thin and unmeasured, not failed, because we have no evidence about fitti
 the record keeps a digest of the example set beside both rates. without it, next week's gap
 would be compared against a number measured on different examples, which is the same mistake as
 quoting a rival's baseline.
+
+## a rejection that changed nothing is the number to look at
+
+a review that says "not yet" is only diligence if the second round is different from the first.
+the dark-factory submissions that measure per-card work measure what a rejection changed, not how
+many rejections there were, and the reason is that a count of rejections rewards a reviewer for
+being busy. so this unit records the difference.
+
+the difference needed one addition to the board. `edit` recorded which fields it touched, not
+whether the text moved, so a field rewritten to the value it already held looked exactly like a
+fix. every `created` and `edited` event now carries a digest per field, and a round compares
+digests. where no earlier fingerprint exists the round is `unproven` rather than silent or
+reworked, because the alternative is guessing in the direction that flatters the reviewer.
+
+work distribution is measured in turns, because a run records them, and in settled spend, because
+a reservation does. spend with no agent named stays unattributed instead of being shared out: an
+even split is a claim about who did the work that nobody made.

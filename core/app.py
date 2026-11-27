@@ -53,6 +53,7 @@ from work.workflows import WorkflowService
 from work.custody import Custody
 from work.liveness import Liveness
 from work.wake import WakeQueue
+from work.distribution import DistributionService
 from work.efficiency import EfficiencyService
 from work.witness import Witness
 from work.lineage import Lineage
@@ -117,6 +118,7 @@ class App:
     wakes: WakeQueue
     witness: Witness
     efficiency: EfficiencyService
+    distribution: DistributionService
     lineage: Lineage
     waivers: Waiver
     liveness: Liveness
@@ -303,6 +305,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # money per correct outcome, measured the same way over two windows, because volume is
     # the number that hides the retries
     efficiency = EfficiencyService(store, kanban=kanban, budget=budget)
+    # where a card's work went, and what a rejection actually changed on it: a rejection that
+    # changed nothing is a round trip that taught nobody anything
+    distribution = DistributionService(store, crews=crews, kanban=kanban)
     runner.budget = budget
     # the unit above a card, the unit of discourse, the count behind a freeze, and the
     # declared doors between crews
@@ -451,6 +456,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         wakes=wakes,
         witness=witness,
         efficiency=efficiency,
+        distribution=distribution,
         lineage=lineage,
         waivers=waivers,
         liveness=liveness,
