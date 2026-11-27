@@ -215,7 +215,17 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
-### the crew's trail
+### importing an agent from another framework
+
+`agents/agent_imports.py` reads six sources into one manifest: claude-code, openclaw,
+crewai, a2a, an openai assistant object and our own export. two rules hold across all of
+them. a tool name from another framework never becomes a local permission: crewai's
+`SerperDevTool` maps to `search` through `CREWAI_TOOLS`, an openai function tool is
+reported as `tool.function.<name>` unless its name is one of ours, and everything else
+lands in `unmapped` for a person to decide. and nothing that is work is imported as
+identity: a crewai `tasks:` block is reported, because tasks belong on the board.
+
+## the crew's trail
 
 `GET /crews/{id}/audit` answers the whole bundle: entries in crew order, the crew verdict,
 each agent's verdict, and a verdict on the bundle itself. `GET /crews/{id}/audit.jsonl`

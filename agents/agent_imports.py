@@ -37,6 +37,7 @@ from typing import Any
 from core.errors import NotFound, ValidationError
 from manage.guardrails import SECRET_SHAPES
 from work import skills as skill_specs
+from agents import simpleyaml
 
 SOURCE_CLAUDE_CODE = "claude-code"
 SOURCE_OPENCLAW = "openclaw"
@@ -365,6 +366,37 @@ def from_openclaw(files: dict[str, str], name_hint: str = "") -> AgentManifest:
     return manifest
 
 
+# crewai ships tool *classes*, and a class name is not a grant. the ones with a real
+# equivalent map; the rest are reported so a person decides, because an imported agent
+# holding "SerperDevTool" holds nothing while looking like it holds a search tool.
+CREWAI_TOOLS = {
+    "serperdevtool": "search", "scrapewebsitetool": "http", "websitesearchtool": "search",
+    "exasearchtool": "search", "googleserperdevtool": "search", "searxsearch": "search",
+    "filereadtool": "files", "filewritertool": "files", "directoryreadtool": "files",
+    "directorysearchtool": "files", "browserbaseloadtool": "browser",
+    "seleniumscrapingtool": "browser", "scrapegraphaitool": "browser",
+    "codeinterpretertool": "shell", "txtsearchtool": "search", "jsonsearchtool": "search",
+    "csvsearchtool": "search", "pdfsearchtool": "search", "docxsearchtool": "search",
+    "mdxsearchtool": "search", "xmlsearchtool": "search", "githubsearchtool": "search",
+    "firecrawlcrawlwebsitetool": "http", "firecrawlscrapewebsitetool": "http",
+}
+
+
+def _crewai_tools(values: list) -> tuple[list[str], list[str]]:
+    granted: list[str] = []
+    unmapped: list[str] = []
+    for value in values:
+        name = str(value or "").strip()
+        if not name:
+            continue
+        target = CREWAI_TOOLS.get(name.lower())
+        if target and target not in granted:
+            granted.append(target)
+        elif not target:
+            unmapped.append(f"tool.{name}")
+    return granted, unmapped
+
+
 def from_crewai(payload: Any, agent_name: str = "") -> AgentManifest:
     if isinstance(payload, str):
         payload = _parse_yaml(payload)
@@ -391,6 +423,10 @@ def from_crewai(payload: Any, agent_name: str = "") -> AgentManifest:
     if not isinstance(entry, dict):
         raise ValidationError("a crewai agent entry must be an object")
     instructions: list[str] = []
+    if entry.get("role"):
+        # crewai puts the agent's identity in `role`, not in prose. a prompt without it
+        # imports a stranger: the role is the first thing the model should read
+        instructions.append(f"## role\n{entry['role']}")
     if entry.get("backstory"):
         instructions.append(f"## backstory\n{entry['backstory']}")
     if entry.get("goal"):
@@ -402,10 +438,19 @@ def from_crewai(payload: Any, agent_name: str = "") -> AgentManifest:
         role=str(entry.get("role") or "")[:200],
         instructions="\n\n".join(instructions),
         model=str(entry.get("llm") or entry.get("model") or ""),
-        tools=_as_list(entry.get("tools")),
+        tools=[],
         source=SOURCE_CREWAI,
         metadata={"origin": "crewai agent config", "entry": entry_name},
     )
+    manifest.tools, unmapped_tools = _crewai_tools(_as_list(entry.get("tools")))
+    manifest.unmapped.extend(unmapped_tools)
+    if isinstance(payload, dict) and isinstance(payload.get("tasks"), (dict, list)):
+        # tasks are work, not identity: importing them as knowledge would put a to-do
+        # list in the agent's head, and as cards it would invent a backlog nobody chose
+        manifest.unmapped.append("tasks")
+        manifest.warnings.append(
+            "this file also defines tasks; they are work, so create them on the board "
+            "rather than importing them")
     if entry.get("allow_delegation") is not None:
         manifest.approval["can_delegate"] = bool(entry.get("allow_delegation"))
     for key in ("max_iter", "max_rpm", "verbose", "type", "function_calling_llm",
@@ -474,11 +519,22 @@ def from_openai(payload: Any) -> AgentManifest:
             continue
         kind = str(tool.get("type") or "")
         if kind == "function" and isinstance(tool.get("function"), dict):
-            tools.append(str(tool["function"].get("name") or "function"))
+            # a function tool is a json schema for an api the host runs. we do not run
+            # it, so importing its name would grant a permission nobody implemented.
+            name = str(tool["function"].get("name") or "function")
+            target = TOOL_MAP.get(name.lower())
+            if target:
+                tools.append(target)
+            else:
+                unmapped.append(f"tool.function.{name}")
         elif kind.startswith("file_search") or kind == "code_interpreter" or kind == "computer_use":
             unmapped.append(f"tool.{kind}")
         else:
-            tools.append(kind or "tool")
+            target = TOOL_MAP.get(kind.lower())
+            if target:
+                tools.append(target)
+            else:
+                unmapped.append(f"tool.{kind or 'unknown'}")
     manifest = AgentManifest(
         name=str(payload.get("name") or "imported assistant"),
         instructions=str(payload.get("instructions") or "").strip(),
@@ -494,6 +550,14 @@ def from_openai(payload: Any) -> AgentManifest:
     for key in ("response_format", "temperature", "top_p", "reasoning_effort", "truncation"):
         if key in payload:
             manifest.unmapped.append(key)
+    stores = ((payload.get("tool_resources") or {}).get("file_search") or {}).get(
+        "vector_store_ids") or []
+    if stores:
+        # the instructions may lean on files that live in somebody else's vector store
+        manifest.unmapped.append("knowledge.vector_store")
+        manifest.warnings.append(
+            f"this assistant reads {len(stores)} vector store(s) we cannot fetch; the "
+            "instructions may assume knowledge that did not arrive")
     return manifest
 
 
@@ -520,20 +584,28 @@ def from_crittertown(payload: Any) -> AgentManifest:
 
 
 def _parse_yaml(text: str) -> Any:
-    try:
-        import yaml  # type: ignore
-    except ImportError:
+    """json if it is json, the built-in subset otherwise, pyyaml only as a last resort.
+
+    the order matters: the subset refuses by line, which is a better error than a
+    dependency message, and pyyaml is an optional extra rather than a requirement.
+    """
+    stripped = (text or "").strip()
+    if stripped.startswith(("{", "[")):
         try:
-            return json.loads(text)
-        except ValueError as exc:
-            raise ValidationError(
-                "crewai configs are usually yaml; install pyyaml or pass the json export",
-                hint="pip install pyyaml",
-            ) from exc
+            return json.loads(stripped)
+        except ValueError:
+            pass
     try:
-        return yaml.safe_load(text) or {}
-    except Exception as exc:  # noqa: BLE001 - yaml has its own error types
-        raise ValidationError(f"could not parse the yaml: {exc}") from exc
+        return simpleyaml.loads(text) or {}
+    except ValidationError:
+        try:
+            import yaml  # type: ignore
+        except ImportError:
+            raise
+        try:
+            return yaml.safe_load(text) or {}
+        except Exception as exc:  # noqa: BLE001 - yaml has its own error types
+            raise ValidationError(f"could not parse the yaml: {exc}") from exc
 
 
 # ---- reading a source --------------------------------------------------

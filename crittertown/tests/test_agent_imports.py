@@ -129,11 +129,17 @@ class FormatTests(AppCase):
         self.assertIn("card.url", manifest.unmapped)
         self.assertTrue(manifest.knowledge)
 
-    def test_an_assistant_object_keeps_instructions_and_named_functions(self):
+    def test_an_assistant_object_keeps_instructions_and_reports_its_functions(self):
         manifest = import_agent(ASSISTANT)
         self.assertEqual(manifest.name, "inbox zero")
-        self.assertEqual(manifest.tools, ["archive"])
+        # a function tool is a schema for an api the host runs, so its name is reported
+        # rather than granted: importing "archive" as a tool would hand the agent a
+        # permission nothing here implements
+        self.assertEqual(manifest.tools, [])
+        self.assertIn("tool.function.archive", manifest.unmapped)
         self.assertIn("tool.file_search", manifest.unmapped)
+        self.assertIn("knowledge.vector_store", manifest.unmapped)
+        self.assertTrue(manifest.warnings)
         self.assertEqual(manifest.metadata["id"], "asst_1")
 
     def test_unknown_json_says_which_formats_it_could_read(self):

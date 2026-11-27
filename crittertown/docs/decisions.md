@@ -675,3 +675,29 @@ and the export is jsonl as well as json. an attestation is only worth something 
 somebody else can check it, and a bundle that needs our parser to read is a bundle that
 needs our word for it. one object per line survives grep, diff, wc and a spreadsheet, and
 `POST /crews/{id}/audit/verify` checks it with nothing but the text.
+
+## a foreign tool name is not a permission
+
+the crewai and openai readers had never been run against a real file. both were doing the
+same wrong thing in different places: passing a foreign tool name through as a local one.
+crewai ships tool classes, so an imported agent arrived holding `SerperDevTool`, and openai
+ships function tools, so it arrived holding `archive`. neither exists here. the profile
+then showed a tool that granted nothing while reading like a grant, which is the exact
+failure the openclaw workspace taught us to refuse.
+
+so both now map or report. crewai class names go through a table, an openai function tool
+is `tool.function.<name>` unless its name is already one of ours, and anything unknown
+lands in `unmapped` where a person sees it. the same rule as the workspace importer, in a
+second place, because the first place was not a rule yet, only a habit.
+
+the second finding is worse than it looks. crewai configs are yaml, pyyaml is an optional
+extra here, so the crewai reader refused every real file on a default install with
+"install pyyaml". an importer that cannot read the format its framework ships is not an
+importer. `agents/simpleyaml.py` reads the subset those files use and refuses anchors, flow
+mappings, multiple documents and tab indentation by line number. a config reader that
+silently turns an anchor into a string is worse than one that says it cannot read line 12.
+
+and a small thing the test caught: crewai keeps the agent's identity in `role`, not in
+prose, so the imported prompt had a backstory and a goal but never said who the agent was.
+`## role` now leads the prompt. a test written against a real file finds that in a way no
+test written against our own shape would.

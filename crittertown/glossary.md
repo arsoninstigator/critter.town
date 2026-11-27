@@ -377,6 +377,15 @@ chain cannot, since a row moved from one agent's trail into another's breaks nei
 `verify_crew` walks it, and rows written before v26 read back as `team_seq` 0 and are
 counted as pre-crew rather than reported broken.
 
+### yaml subset
+
+the part of yaml config files use, read without a dependency (`agents/simpleyaml.py`):
+block mappings by indentation, block and inline lists, block scalars, comments, quoted and
+plain scalars, booleans and null. anchors, flow mappings, multiple documents and tab
+indentation are refused by line number rather than guessed. it exists because crewai ships
+yaml and pyyaml is an optional extra here, so every real crewai file was refused with
+"install pyyaml" on a default install.
+
 ### workspace import
 
 reading an agent out of the shape another tool stores it in. openclaw is a directory of
