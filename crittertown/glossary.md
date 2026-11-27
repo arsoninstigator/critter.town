@@ -367,6 +367,14 @@ that makes it a claim: it composes every agent's context and every body of reach
 looks for the criteria in them, so a slice added later that happens to carry one fails there
 instead of quietly making the next metric meaningless.
 
+### model name
+
+what an imported agent asks to be run on. it is a request, not a promise: the deployment
+decides what answers, and an openai-compatible endpoint serves whatever the operator's
+provider serves. so the importer checks shape only (`agents/models.py`): a name has no
+spaces, commas or paths, provider prefixes like `openai/` are stripped, and a sentence is
+refused into `unmapped` rather than trimmed into something that looks like a choice.
+
 ### shipped skill
 
 a SKILL.md the tool carries about itself, installed into a crew on request rather than

@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.errors import NotFound, ValidationError
+from agents import models as models_mod
 from manage.guardrails import SECRET_SHAPES
 from work import skills as skill_specs
 from agents import simpleyaml
@@ -197,7 +198,7 @@ def from_claude_code(text: str, name_hint: str = "") -> AgentManifest:
         name=name,
         role=str(meta.get("description") or "")[:200],
         instructions=body.strip(),
-        model=str(meta.get("model") or ""),
+        model="",
         tools=tools,
         source=SOURCE_CLAUDE_CODE,
         warnings=warnings,
@@ -206,7 +207,26 @@ def from_claude_code(text: str, name_hint: str = "") -> AgentManifest:
     for key in meta:
         if key not in {"name", "description", "tools", "allowed-tools", "model"}:
             manifest.unmapped.append(f"frontmatter.{key}")
+    manifest.model = _model_name(str(meta.get("model") or ""), manifest)
     return manifest
+
+
+def _model_name(raw: Any, manifest: AgentManifest) -> str:
+    """the model name a source asked for, or nothing plus a warning naming why not.
+
+    a name that is a sentence is refused here rather than adopted, because the column is
+    sent to a vendor and "gpt-4o, best for writing" is not a model. a name this deployment
+    does not serve is kept: it is a request, and adopt says so out loud.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    try:
+        return models_mod.normalize(text)
+    except ValidationError as exc:
+        manifest.unmapped.append(f"model:{text[:40]}")
+        manifest.warnings.append(str(exc))
+        return ""
 
 
 def _secret_hits(text: str) -> list[str]:
@@ -437,7 +457,7 @@ def from_crewai(payload: Any, agent_name: str = "") -> AgentManifest:
         name=str(entry.get("name") or entry_name),
         role=str(entry.get("role") or "")[:200],
         instructions="\n\n".join(instructions),
-        model=str(entry.get("llm") or entry.get("model") or ""),
+        model="",
         tools=[],
         source=SOURCE_CREWAI,
         metadata={"origin": "crewai agent config", "entry": entry_name},
@@ -457,6 +477,7 @@ def from_crewai(payload: Any, agent_name: str = "") -> AgentManifest:
                 "memory", "cache", "system_template", "prompt_template"):
         if key in entry:
             manifest.unmapped.append(key)
+    manifest.model = _model_name(entry.get("llm") or entry.get("model") or "", manifest)
     return manifest
 
 
@@ -541,6 +562,7 @@ def from_a2a(payload: Any) -> AgentManifest:
         manifest.warnings.append(
             "an agent card describes what an agent can do, not how it thinks: "
             "no system prompt came with it, so the instructions are empty")
+    manifest.model = _model_name(payload.get("model") or "", manifest)
     return manifest
 
 
@@ -589,7 +611,7 @@ def from_openai(payload: Any) -> AgentManifest:
     manifest = AgentManifest(
         name=str(payload.get("name") or "imported assistant"),
         instructions=str(payload.get("instructions") or "").strip(),
-        model=str(payload.get("model") or ""),
+        model="",
         tools=tools,
         source=SOURCE_OPENAI,
         metadata={"origin": "openai assistant object",
@@ -609,6 +631,7 @@ def from_openai(payload: Any) -> AgentManifest:
         manifest.warnings.append(
             f"this assistant reads {len(stores)} vector store(s) we cannot fetch; the "
             "instructions may assume knowledge that did not arrive")
+    manifest.model = _model_name(payload.get("model") or "", manifest)
     return manifest
 
 
@@ -621,7 +644,7 @@ def from_crittertown(payload: Any) -> AgentManifest:
         name=str(payload["name"]),
         role=str(payload.get("role") or ""),
         instructions=str(payload.get("instructions") or ""),
-        model=str(payload.get("model") or ""),
+        model="",
         skills=_as_list(payload.get("skills")),
         tools=_as_list(payload.get("tools")),
         knowledge=list(payload.get("knowledge") or []),
@@ -907,16 +930,15 @@ def adopt(app, team_id: str, manifest: AgentManifest, name: str = "") -> dict:
         profile.set(agent["id"], "instructions", "import-source",
                     {"source": manifest.source,
                      "role": manifest.role,
+                     "model": manifest.model,
                      "unmapped": manifest.unmapped,
                      "approval": manifest.approval},
                     origin=f"import:{manifest.source}")
         written.append("instructions.import-source")
     warnings.extend(manifest.warnings)
     deployed_model = getattr(app.settings, "llm_model", "")
-    if manifest.model and deployed_model and manifest.model != deployed_model:
-        warnings.append(
-            f"the source says model '{manifest.model}', and this deployment answers with "
-            f"'{deployed_model}'; the agent carries the name, the deployment decides")
+    if manifest.model:
+        warnings.append(models_mod.advisory(manifest.model, deployed_model))
     if manifest.channels:
         warnings.append("channel bindings were not applied: a channel is a crew decision")
     for item in manifest.unmapped:

@@ -734,3 +734,22 @@ account and not an order, the role is its first sentence, the skills are reporte
 begins "the remote agent claims", with the card's url as its source. the security and
 transport keys stay unmapped, and a card carrying a credential is refused outright,
 because a card is served in public and a key in one is a key that has already leaked.
+
+## a model name is a request, not a promise
+
+the importers put whatever the source said into the model column, so a crewai
+`llm: gpt-4o, best for writing` became a value a vendor was asked to serve. the obvious
+fix is an allowlist of models we can run, and it would be wrong: this platform talks to an
+openai-compatible endpoint, so the list belongs to whoever's provider is behind it. an
+allowlist here would refuse names that work and bless names that do not, and a refusal is
+harder to argue with than a warning.
+
+so the check is shape. a name has no spaces, commas, paths or urls, provider prefixes are
+stripped because `openai/gpt-4o` and `anthropic/claude-sonnet-4` are how other frameworks
+spell two names we already know, and a sentence is refused into `unmapped` rather than
+trimmed to its first token. trimming would have hidden the part the source was telling us.
+
+the half that mattered more: a name this deployment does not serve is kept, recorded in the
+`import-source` profile entry, and explained in one sentence naming both values. dropping it
+would make the import look clean and leave the operator's mismatch for the first turn to
+discover, which is the failure this whole import path exists to move earlier.

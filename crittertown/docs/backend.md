@@ -215,7 +215,17 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
-### reading a card somebody else wrote
+### what a model name means on the way in
+
+every importer runs its model string through `agents/models.py`. a name is kept, a provider
+prefix is stripped, and a sentence is refused into `unmapped` with a warning, because the
+column is sent to a vendor and `gpt-4o, best for writing` is not a model. adoption records
+the claim in the agent's `import-source` profile entry and says in one sentence who
+decides: `the source asks for model 'gpt-4o', and this deployment answers with
+'gpt-4.1-mini'`. there is no allowlist, and inventing one would refuse names that work
+while blessing names that do not.
+
+## reading a card somebody else wrote
 
 an a2a agent card is a claim about a remote agent, written by that agent's operator. so
 `from_a2a` reads it as testimony: the description becomes instructions with a header
