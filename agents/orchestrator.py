@@ -81,6 +81,8 @@ class CrewRunner:
         self.wakes = None
         # set by the composition root: what the run was handed, hashed, so drift is visible
         self.witness = None
+        # set by the composition root: what a run reached for beyond its provisioned inputs
+        self.readable = None
         # set by the composition root: the decisions a crew builds on, read against the card
         # before the work starts, because a claim that disagrees with another is cheaper to
         # settle than to build on
@@ -394,6 +396,15 @@ class CrewRunner:
             self._retire_sidecars(task_id)
 
         self._update_run(run_id, steps, status="succeeded")
+        # what this run reached for, against what it was given. written after the fact and
+        # never fatal: an accounting layer that can stop work is a policy layer with a
+        # different name, and the rails already do that job
+        readable_reading: dict = {}
+        if self.readable is not None:
+            try:
+                readable_reading = self.readable.for_run(run_id)
+            except CritterTownError:
+                readable_reading = {}
         if self.wakes is not None:
             self.wakes.settle(run_id, outcome="succeeded")
         self.crews.update_agent(agent["id"], status="idle")
@@ -437,6 +448,9 @@ class CrewRunner:
             "result": result,
             "error": error,
             "mandate_findings": mandate_findings,
+            "readable": {"signals": readable_reading.get("signals", 0),
+                         "unprovisioned": bool(readable_reading.get("unprovisioned")),
+                         "why": (readable_reading.get("why") or [])[:10]},
             "ledger": {"verdict": ledger_check.get("verdict", "clear"),
                        "contested": ledger_check.get("contested") or [],
                        "found": [row["id"] for row in ledger_check.get("found") or []]},

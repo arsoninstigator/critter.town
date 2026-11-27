@@ -144,6 +144,20 @@ what sort of work a card is: code, design, research, security, financial, media,
 accounting, support, doc. it is the axis the board was missing, because every gate and
 every acceptance rule had been written for code and silently applied to a deal.
 
+### readable space
+everything a run did that can be traced back, step by step, to the inputs somebody provisioned: the
+brief, the allowed hosts, the tool list, the sandbox. it can only be established afterwards,
+because it needs a completed backtrace of what the run actually did, and it is the property that
+makes an outcome reproducible.
+
+### auxiliary supply
+the second stream of input running under every provisioned one: the network, a package registry, a
+cached artefact, an environment key, the particular machine the work landed on. selection pressure
+does not care which stream an advantage arrives through, so a run can look like it did the work
+when it borrowed the answer. a channel found in a run's commands that no declaration covers is
+auxiliary, and a correct outcome that leaned on it is not the same kind of correct as one that did
+not.
+
 ### statement
 a decision a crew builds on, as a row: the claim, one of the six kinds of drift, the subject it
 is about, where it came from, and whether a person or an agent decided it. an agent may only

@@ -707,3 +707,32 @@ routes: `POST|GET /crews/{id}/statements`, `GET /crews/{id}/statements/contradic
 `POST /crews/{id}/statements/check`, `GET /statements/{id}`, `POST /statements/{id}/settle`,
 `POST /statements/{id}/retire`, `GET /cards/{id}/statements`. a card declares what it is about in
 `payload.subjects`. schema 31 adds `statements` and `statement_checks`.
+
+## what a run reached for, against what it was given
+
+`work/readable.py` separates the part of a run that is traceable to its provisioned inputs from the
+part that arrived through some other channel. the framing comes from an essay on self-guided
+factories, which calls the first readable space and the second the auxiliary supply, and the reason
+it matters here is narrow: an advantage that came through the network, a registry or an environment
+key is real, and it is not reproducible, so counting it at par with the crew's own supply teaches
+nothing about what that supply can produce.
+
+`signals(commands)` is pure and reads commands by pattern: a URL or a git remote names a host, an
+install names an ecosystem and a package, an environment reference whose name looks like a key names
+a channel. it never executes anything and never parses a shell, so a command it does not understand
+produces no signal instead of a guess. `provisioned(task, rails)` builds the supply: `egress_hosts`
+from the rails, the card's declared `channels`, and nothing else. `classify(found, supply)` splits
+the signals and reports `unprovisioned`, `readable_share` and the reasons by channel.
+
+a forbidden tool is recorded as a provisioned decision about that tool, not as a supply of it, and a
+crew with no egress allowlist has provisioned no hosts rather than every host. both refusals are the
+same rule: silence is not permission.
+
+`Readable.for_run(run_id)` writes a `readable_checks` row; the orchestrator calls it when a run
+succeeds and puts the summary on the run record, and a failure to read is swallowed, since an
+accounting layer that can stop work is a policy layer with a different name and the rails already
+do that. `for_card` unions the channels across a card's runs, and `for_crew` reports how many cards
+leaned on auxiliary supply in the window.
+
+routes: `GET /runs/{id}/readable?record=`, `GET /cards/{id}/readable`,
+`GET /crews/{id}/readable?days=`. schema 32 adds `readable_checks`.

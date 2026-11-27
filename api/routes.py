@@ -419,6 +419,22 @@ def create_api(app: App | None = None) -> FastAPI:
     def card_statements(task_id: str) -> dict:
         return app.ledger.for_card(task_id)
 
+    # what a run reached for, against what it was provisioned with. an advantage that came
+    # through a channel nobody provisioned is real and is not reproducible
+    @api.get("/crews/{team_id}/readable")
+    def crew_readable(team_id: str, days: float = Query(7)) -> dict:
+        app.crews.get_team(team_id)
+        until = now()
+        return app.readable.for_crew(team_id, since=until - days * 86400.0, until=until)
+
+    @api.get("/cards/{task_id}/readable")
+    def card_readable(task_id: str) -> dict:
+        return app.readable.for_card(task_id)
+
+    @api.get("/runs/{run_id}/readable")
+    def run_readable(run_id: str, record: bool = Query(False)) -> dict:
+        return app.readable.for_run(run_id, record=record)
+
     # ---- the crew's trail, in one order --------------------------------
     # per-agent chains say what one agent did; the crew chain says what happened, in what
     # order, across agents. jsonl because an audit you cannot grep is one you must trust.

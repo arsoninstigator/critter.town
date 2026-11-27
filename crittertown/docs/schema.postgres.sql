@@ -839,6 +839,24 @@ create table if not exists statement_checks (
 );
 create index if not exists statement_checks_crew on statement_checks (team_id, created_date);
 
+-- v32: what a run actually reached for, against what it was provisioned with. an advantage that
+-- arrived through a channel nobody provisioned is real, and it is not reproducible, so a crew
+-- that counts it at par with its own supply learns nothing about what the supply can produce.
+create table if not exists readable_checks (
+    id text primary key,
+    team_id text not null,
+    task_id text not null default '',
+    run_id text not null default '',
+    signals integer not null default 0,
+    readable integer not null default 0,
+    auxiliary integer not null default 0,
+    unprovisioned integer not null default 0,
+    why text not null default '[]',
+    created_date double precision not null
+);
+create index if not exists readable_checks_crew on readable_checks (team_id, created_date);
+create index if not exists readable_checks_run on readable_checks (run_id);
+
 -- v23: skills. a skill is know-how with a name and a trigger, loaded in three stages so a
 -- crew with forty of them does not spend forty bodies of context on a card that needs none.
 create table if not exists skills (

@@ -69,6 +69,7 @@ from work.skills import SkillService
 from work.templates import TemplateService
 from work.holdout import HoldoutService
 from work.ledger import Ledger
+from work.readable import Readable
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -144,6 +145,7 @@ class App:
     # the acceptance criteria a crew may not read, and the ledger of who tried
     holdout: HoldoutService
     ledger: Ledger
+    readable: Readable
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -409,6 +411,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # a contradiction is computed from declared subjects, never judged from the prose
     ledger = Ledger(store, crews=crews, kanban=kanban, audit=audit)
     runner.ledger = ledger
+    readable = Readable(store, kanban=kanban, guardrails=guardrails,
+                        audit=audit)
+    runner.readable = readable
     runner.context = context
 
     kanban.events_hook = emit
@@ -483,6 +488,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         templates=templates,
         holdout=holdout,
         ledger=ledger,
+        readable=readable,
         polls=polls,
         browsers=browsers,
         ops=ops,

@@ -946,3 +946,24 @@ settles, since a claim about what the product is, made by the thing being measur
 until somebody answers for it. and a contradiction is computed from a declared subject rather than
 inferred from the prose, because an inference that two sentences disagree is a guess wearing a
 finding's clothes; where no subject is declared the ledger says `ask` instead of `blocked`.
+
+## an outcome that borrowed its advantage is not the same outcome
+
+the sharpest thing in the writing on self-guided factories is not about autonomy, it is about
+attribution: a factory that is opaque even to itself can still be steered by reading its wake, and
+the wake shows which advantages arrived through channels the governor never supplied. the essay
+calls that stream the auxiliary supply, and the point is that selection pressure is indifferent to
+where an advantage came from, so a success that leaned on it looks exactly like a success that did
+not.
+
+for us that is a measurement problem, not a philosophy one. a card that closed by fetching the
+answer from a host nobody allowlisted, or by installing a package nobody provisioned, scored a
+correct outcome on inputs the crew cannot reproduce. we record the split rather than forbid it,
+because the rails already forbid what the crew decided to forbid, and an accounting layer that can
+stop work is a policy layer wearing a different name.
+
+the mechanism reads commands by pattern and refuses to guess. a command it does not understand
+yields no signal, an empty allowlist means no hosts provisioned rather than all of them, and a
+forbidden tool is a decision about a tool rather than a supply of one. those three refusals are the
+same rule in three places: silence is not permission, and a checker that assumes the friendly
+reading is worse than no checker.
