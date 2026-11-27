@@ -491,14 +491,17 @@ def create_api(app: App | None = None) -> FastAPI:
     # what a correct outcome cost. volume is not the measure: a card that needed three
     # attempts and two rejections is one correct outcome at three attempts' cost
     @api.get("/crews/{team_id}/efficiency")
-    def crew_efficiency(team_id: str, days: float = Query(7), compare: bool = Query(True)) -> dict:
+    def crew_efficiency(team_id: str, days: float = Query(7), compare: bool = Query(True),
+                        durability_days: float = Query(7)) -> dict:
         app.crews.get_team(team_id)
         until = now()
-        report = app.efficiency.for_crew(team_id, since=until - days * 86400.0, until=until)
+        report = app.efficiency.for_crew(team_id, since=until - days * 86400.0, until=until,
+                                         durability_days=durability_days)
         if compare:
             # the baseline is the same measurement over the previous window of equal length,
             # not a published number from somewhere else
-            report["baseline"] = app.efficiency.compare_windows(team_id, days=days)
+            report["baseline"] = app.efficiency.compare_windows(
+                team_id, days=days, durability_days=durability_days)
         return report
 
     @api.get("/cards/{task_id}/efficiency")

@@ -58,6 +58,14 @@ class DivisionTests(unittest.TestCase):
         self.assertIsNone(block["cost_per_correct"])
         self.assertFalse(block["partial"])
 
+    def test_a_correct_outcome_is_not_yet_a_durable_one(self):
+        block = eff.summarise([{"spend_cents": 200, "correct": True, "durable": False,
+                                "rejected": 0}])
+        self.assertEqual(block["correct"], 1)
+        self.assertEqual(block["durable"], 0)
+        self.assertIsNone(block["cost_per_durable"])
+        self.assertEqual(block["cost_per_correct"], 200.0)
+
     def test_a_partial_window_is_not_a_baseline(self):
         current = eff.summarise([{"spend_cents": None, "correct": True, "rejected": 0}])
         earlier = eff.summarise([{"spend_cents": 100, "correct": True, "rejected": 0}])
@@ -173,6 +181,42 @@ class ServiceTests(AppCase):
         self.assertEqual(found["now"]["cost_per_correct"], 400.0)
         self.assertIsNone(found["before"]["cost_per_correct"])
         self.assertEqual(found["verdict"], "unknown")
+
+    def test_a_card_closed_a_moment_ago_is_not_durable_yet(self):
+        task = self.card("settle the policy")
+        self.spend(task, 400)
+        self.close(task)
+        report = self.app.efficiency.for_crew(self.team["id"])
+        self.assertEqual(report["total"]["correct"], 1)
+        self.assertEqual(report["total"]["durable"], 0)
+        self.assertEqual(report["durability_days"], 7.0)
+        # the same card at a checkpoint it has already passed
+        passed = self.app.efficiency.for_crew(self.team["id"], durability_days=0)
+        self.assertEqual(passed["total"]["durable"], 1)
+        self.assertEqual(passed["total"]["cost_per_durable"], 400.0)
+
+    def test_a_card_that_came_back_is_named_and_not_durable(self):
+        task = self.card("settle the policy")
+        self.spend(task, 400)
+        self.close(task)
+        self.app.kanban.move(task["id"], "in_progress", "owner", note="the cite was wrong")
+        report = self.app.efficiency.for_crew(self.team["id"], durability_days=0)
+        self.assertEqual(report["total"]["durable"], 0)
+        self.assertEqual([c["task_id"] for c in report["came_back"]], [task["id"]])
+        self.assertEqual(report["total"]["correct"], 0)
+
+    def test_a_card_that_came_back_and_closed_again_is_durable_again(self):
+        # durable is a state at the checkpoint, not a clean history: the churn still shows in
+        # came_back, and the second close is the one credited
+        task = self.card("settle the policy")
+        self.spend(task, 400)
+        self.close(task)
+        self.app.kanban.move(task["id"], "in_progress", "owner", note="the cite was wrong")
+        self.close(self.app.kanban.get_task(task["id"]))
+        report = self.app.efficiency.for_crew(self.team["id"], durability_days=0)
+        self.assertEqual(report["total"]["correct"], 1)
+        self.assertEqual(report["total"]["durable"], 1)
+        self.assertEqual([c["task_id"] for c in report["came_back"]], [task["id"]])
 
     def test_one_card_reads_its_own_cost(self):
         task = self.card("settle the policy")

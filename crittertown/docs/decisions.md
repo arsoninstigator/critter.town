@@ -879,6 +879,13 @@ the rule set travelling in the response. we rejected comparing against a publish
 because a rival's number is measured on a rival's cards, and a figure nobody can re-run is an
 advertisement.
 
+one refinement came from reading the metric written down properly rather than inferred from
+submissions: cost per accepted durable outcome divides by outcomes still useful at a checkpoint,
+because a card that closes and comes back was never an outcome. we kept both figures instead of
+replacing one, since a crew needs to know what it produced this week and what of last month's
+work survived. the checkpoint is seven days by default and the window's end is what it is
+measured from, so the same card is correct today and durable next week.
+
 the honest hole is spend we cannot see: a card that closed with no reservation has unknown
 spend, not free spend. `partial` and `correct_with_unknown_spend` say so, and a comparison
 involving a partial window answers `unknown` instead of a delta, because a cheaper number built

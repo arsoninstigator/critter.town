@@ -599,7 +599,14 @@ is one rejection each. a card is correct when its column is `done` and it carrie
 reference, so a card in review is not yet an outcome and a blocked card is not written off as
 one.
 
-`for_crew(team_id, since, until)` returns the crew total, one block per agent sorted by cost per
+durability is the checkpoint: a correct card counts as `durable` only when the window's end is
+at least `durability_days` (7 by default) past the move that closed it, so a card closed this
+morning is a correct outcome and not yet a durable one, and `cost_per_durable` is the figure to
+read when the question is what survived. a card that left `done` counts as `came_back` and is
+credited again only if it closes again, which is what makes churn visible without punishing a
+fix.
+
+`for_crew(team_id, since, until, durability_days)` returns the crew total, one block per agent sorted by cost per
 outcome (unknown last), the ten cards that cost money and closed nothing, and the ten cards that
 were retried or rejected, both by spend. `compare_windows(team_id, days)` measures the window and
 the previous window of equal length and returns `verdict` of cheaper, dearer, level or unknown,
@@ -607,7 +614,8 @@ where unknown is what a window with unknown spend deserves. `compare()` puts the
 response and marks `reproducible: true`, because the baseline is this same query over earlier
 rows, not a number borrowed from somewhere else.
 
-routes: `GET /crews/{id}/efficiency?days=7&compare=true` and `GET /cards/{id}/efficiency`.
+routes: `GET /crews/{id}/efficiency?days=7&compare=true&durability_days=7` and
+`GET /cards/{id}/efficiency`.
 
 no schema change: the ledger already holds settled cents per task, and the review move already
 sits in `task_events`.

@@ -27,6 +27,9 @@ from typing import Any
 from core.db import Store, loads, now
 
 DEFAULT_WINDOW_DAYS = 7
+# an outcome is not durable the hour it closes. the checkpoint is long enough that a card
+# which was going to come back has had its chance to
+DEFAULT_DURABILITY_DAYS = 7
 SECONDS_PER_DAY = 86400.0
 
 RULES = (
@@ -34,6 +37,7 @@ RULES = (
     "a correct outcome is a card in done with an evidence reference",
     "a rejection is a card that moved out of review to anything but done, counted once each",
     "cost per correct outcome is spend divided by correct outcomes, not by cards",
+    "a durable outcome is one still closed after the durability checkpoint, never reopened",
     "a card with no settled reservation has unknown spend, and unknown is reported, not zero",
     "the baseline is the same measurement over the previous window of equal length",
 )
@@ -54,6 +58,7 @@ def summarise(cards: list[dict]) -> dict:
     """
     spend = 0.0
     correct = 0
+    durable = 0
     rejected = 0
     unknown = 0
     known_spend_correct = 0
@@ -65,15 +70,19 @@ def summarise(cards: list[dict]) -> dict:
                 unknown += 1
             else:
                 known_spend_correct += 1
+        if card.get("durable"):
+            durable += 1
         if amount is not None:
             spend += float(amount)
         rejected += int(card.get("rejected") or 0)
     return {
         "cards": len(cards),
         "correct": correct,
+        "durable": durable,
         "rejected": rejected,
         "spend_cents": round(spend, 2),
         "cost_per_correct": rate(spend, correct),
+        "cost_per_durable": rate(spend, durable),
         "cost_per_card": rate(spend, len(cards)),
         "correct_with_known_spend": known_spend_correct,
         "correct_with_unknown_spend": unknown,
@@ -115,7 +124,8 @@ class EfficiencyService:
         self.budget = budget
 
     # ---- the rows ------------------------------------------------------
-    def _cards(self, team_id: str, since: float, until: float) -> list[dict]:
+    def _cards(self, team_id: str, since: float, until: float,
+               durability_days: float = DEFAULT_DURABILITY_DAYS) -> list[dict]:
         """every card that was touched in the window, with what it cost and how it ended."""
         tasks = self.store.query(
             """select id, title, column_name, assignee_agent_id, evidence_ref, attempts,
@@ -131,14 +141,23 @@ class EfficiencyService:
                 (team_id, since, until)):
             spend[row["task_id"]] = float(row["n"])
         rejected: dict[str, int] = {}
+        reopened: dict[str, int] = {}
+        closed_at: dict[str, float] = {}
         for row in self.store.query(
-                """select task_id, data from task_events
+                """select task_id, data, created_date from task_events
                    where kind = 'moved' and created_date >= ? and created_date <= ?
-                     and task_id in (select id from tasks where team_id = ?)""",
+                     and task_id in (select id from tasks where team_id = ?)
+                   order by created_date""",
                 (since, until, team_id)):
             data = loads(row["data"], {})
             if data.get("from") == "review" and data.get("to") != "done":
                 rejected[row["task_id"]] = rejected.get(row["task_id"], 0) + 1
+            if data.get("from") == "done":
+                # a card that left done came back, and an outcome that came back is not one
+                reopened[row["task_id"]] = reopened.get(row["task_id"], 0) + 1
+                closed_at.pop(row["task_id"], None)
+            if data.get("to") == "done":
+                closed_at[row["task_id"]] = float(row["created_date"])
         cards = []
         for row in tasks:
             cards.append({
@@ -151,16 +170,25 @@ class EfficiencyService:
                 # a card in review is not correct yet, and a blocked card is a failure that
                 # has not been written off, so neither is counted as an outcome at all
                 "correct": bool(row["column_name"] == "done" and row["evidence_ref"]),
+                # durable is the same card at the checkpoint: still closed, and it did not
+                # leave done after the close it is being credited for
+                "durable": bool(
+                    row["column_name"] == "done" and row["evidence_ref"]
+                    and row["id"] in closed_at
+                    and until - closed_at[row["id"]] >= durability_days * SECONDS_PER_DAY),
+                "closed_at": closed_at.get(row["id"]),
+                "reopened": reopened.get(row["id"], 0),
                 "rejected": rejected.get(row["id"], 0),
             })
         return cards
 
     # ---- the answers ---------------------------------------------------
     def for_crew(self, team_id: str, since: float | None = None,
-                 until: float | None = None) -> dict:
+                 until: float | None = None,
+                 durability_days: float = DEFAULT_DURABILITY_DAYS) -> dict:
         until = now() if until is None else float(until)
         since = (until - DEFAULT_WINDOW_DAYS * SECONDS_PER_DAY) if since is None else float(since)
-        cards = self._cards(team_id, since, until)
+        cards = self._cards(team_id, since, until, durability_days=durability_days)
         by_agent: dict[str, list[dict]] = {}
         for card in cards:
             by_agent.setdefault(card["agent_id"], []).append(card)
@@ -175,22 +203,28 @@ class EfficiencyService:
             "since": since,
             "until": until,
             "window_days": round((until - since) / SECONDS_PER_DAY, 2),
+            "durability_days": float(durability_days),
             "total": summarise(cards),
             "agents": agents,
             # the cards a person would actually look at: the ones that cost and did not pay
             "expensive_without_outcome": sorted(
                 [c for c in cards if not c["correct"] and c["spend_cents"]],
                 key=lambda c: -(c["spend_cents"] or 0))[:10],
+            "came_back": sorted(
+                [c for c in cards if c["reopened"]],
+                key=lambda c: -(c["spend_cents"] or 0))[:10],
             "retried": sorted(
                 [c for c in cards if c["rejected"] or c["attempts"] > 1],
                 key=lambda c: -(c["spend_cents"] or 0))[:10],
         }
 
-    def compare_windows(self, team_id: str, days: float = DEFAULT_WINDOW_DAYS) -> dict:
+    def compare_windows(self, team_id: str, days: float = DEFAULT_WINDOW_DAYS,
+                        durability_days: float = DEFAULT_DURABILITY_DAYS) -> dict:
         until = now()
         span = float(days) * SECONDS_PER_DAY
-        current = summarise(self._cards(team_id, until - span, until))
-        before = summarise(self._cards(team_id, until - 2 * span, until - span))
+        current = summarise(self._cards(team_id, until - span, until, durability_days))
+        before = summarise(self._cards(team_id, until - 2 * span, until - span,
+                                       durability_days))
         return {
             "team_id": team_id,
             "window_days": float(days),

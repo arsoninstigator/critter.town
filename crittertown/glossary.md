@@ -96,8 +96,10 @@ money per correct outcome. spend is every settled reservation attached to the ca
 is a card in `done` with an evidence reference, and the division is by outcomes, not by cards.
 a card that took three attempts and two rejections is still one correct outcome, and counting
 it as one card makes the retries disappear; charging it at three attempts' cost makes them the
-story. a card with no reservation has unknown spend, which is reported as `partial` rather than
-read as zero. `GET /crews/{id}/efficiency` carries its own rules and a baseline over the
+story. a card is only durable once it is still closed after the durability checkpoint (seven
+days by default), so the hour a card closes buys nothing yet and a card that came back is not an
+outcome at all. a card with no reservation has unknown spend, which is reported as `partial`
+rather than read as zero. `GET /crews/{id}/efficiency` carries its own rules and a baseline over the
 previous window of equal length, so the number can be re-run by anyone.
 
 ### department
