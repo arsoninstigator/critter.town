@@ -872,9 +872,13 @@ create table if not exists model_lanes (
     limits text not null default '{}',
     cooling_until double precision not null default 0,
     weight double precision not null default 1,
+    models text not null default '{}',
+    reset text not null default 'null',
     created_date double precision not null,
     unique (team_id, label)
 );
+-- v38: one key serves several models and a provider meters each on its own, and a provider resets at a
+-- wall clock time in a zone. a model with no entry is uncapped and never inherits another's cap.
 create table if not exists model_calls (
     id text primary key,
     team_id text not null,
@@ -885,6 +889,7 @@ create table if not exists model_calls (
     measured integer not null default 0,
     estimated integer not null default 0,
     status integer not null default 200,
+    model text not null default '',
     created_date double precision not null
 );
 create index if not exists model_calls_lane on model_calls (lane_id, created_date);

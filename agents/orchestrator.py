@@ -609,7 +609,7 @@ class CrewRunner:
 
         def report(call: dict) -> None:
             capacity.record(lane_id, run_id, call.get("usage"), headers=call.get("headers"),
-                            status=int(call.get("status") or 200))
+                            status=int(call.get("status") or 200), model=lane["model"])
 
         return OpenAICompatibleModel(
             base_url=lane["base_url"], api_key=os.environ.get(lane["token_env"], ""),

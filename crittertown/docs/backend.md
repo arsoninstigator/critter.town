@@ -897,3 +897,26 @@ routes: `POST|GET /crews/{id}/lanes`, `POST /lanes/{id}/limits`, `POST /lanes/{i
 `GET /crews/{id}/lanes/pick`, `GET /crews/{id}/lanes/share`. schema 37 adds `model_lanes` and
 `model_calls`. the escalation count no longer has a default ceiling either: `monthly_budget` unset
 means no budget and a crew is never called over.
+
+### per model allowances and a reset at a clock time
+
+a provider meters each model on its own, so a lane takes `models`:
+`{"gpt-4o": {"tokens": {"day": 100000}}, "gpt-4o-mini": {"tokens": {"day": 2000000}}}`. a call is
+recorded against the model it actually used, `room(lane, model=...)` reads that model's entry, and
+`pick(team, model=...)` skips a lane whose allowance for that model is spent while still using it for
+another. a model with no entry is uncapped and does not inherit another model's cap, since that would be a
+number the provider never stated. a lane's whole-key `limits` still apply to a model with no entry of its
+own.
+
+a lane's `reset` is `{"at": "12:00", "tz": "America/New_York"}`. a day window then starts at the most
+recent time the wall clock in that zone read the reset time, so the same setting is 17:00 utc in winter
+and 16:00 in summer, and a moment before noon is still in the previous window. minute and hour windows
+stay rolling, because a per minute limit has no wall clock anchor. with no reset stated the day is the
+utc day and the reading says `stated: false`. the zone must be a region name: `EST`, `CET` and
+`Etc/GMT+5` are real entries in the tz database but fixed offsets with no daylight saving, so a reset on
+one would drift an hour for half the year and is refused. a spent model reports when it comes back
+(`binding.resets`).
+
+routes: `POST /lanes/{id}/models`, `POST /lanes/{id}/reset`; `POST /crews/{id}/lanes` takes both. schema
+38 adds `models` and `reset` to `model_lanes` and `model` to `model_calls`, added to existing databases
+through `LATER_COLUMNS` so a v37 database upgrades in place.

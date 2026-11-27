@@ -1080,3 +1080,15 @@ usable parks through the environment-blocked path with no attempt spent, because
 what is stored is what the provider returned. a call with no usage block is unmeasured and never given a
 guessed count, and an estimate is kept apart from a measurement so a figure never reads as the
 provider's word when it is ours. a key is only ever the name of a variable.
+
+## an allowance belongs to a model, and a day belongs to the provider's clock
+
+the owner's example was two numbers on one key: 100k tokens a day for one model and 2m for another,
+resetting at 12:00 eastern. a lane that held one model and one set of limits could not say that, and a
+utc day boundary would have counted usage against the wrong day for most of it.
+
+so an allowance is per model, a model without an entry is uncapped rather than borrowing a neighbour's
+number, and the reset is a wall clock time in a region zone so daylight saving is the zone database's
+problem and not ours. fixed offset names are refused on purpose: the tz database accepts `EST` as a real
+zone, which is exactly why checking that a zone exists was not enough. a window that is wrong by an hour
+for half the year would pass every test written against one date.

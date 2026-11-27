@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 37
+SCHEMA_VERSION = 38
 
 SCHEMA = """
 create table if not exists meta (
@@ -892,9 +892,13 @@ create table if not exists model_lanes (
     limits text not null default '{}',
     cooling_until real not null default 0,
     weight real not null default 1,
+    models text not null default '{}',
+    reset text not null default 'null',
     created_date real not null,
     unique (team_id, label)
 );
+-- v38: one key serves several models and a provider meters each on its own, and a provider resets at a
+-- wall clock time in a zone. a model with no entry is uncapped and never inherits another's cap.
 create table if not exists model_calls (
     id text primary key,
     team_id text not null,
@@ -905,6 +909,7 @@ create table if not exists model_calls (
     measured integer not null default 0,
     estimated integer not null default 0,
     status integer not null default 200,
+    model text not null default '',
     created_date real not null
 );
 create index if not exists model_calls_lane on model_calls (lane_id, created_date);
@@ -1397,6 +1402,14 @@ def now() -> float:
 
 
 LATER_COLUMNS: dict[str, dict[str, str]] = {
+    # v38: a lane serves several models, each metered on its own, and resets at a wall clock time
+    "model_lanes": {
+        "models": "text not null default '{}'",
+        "reset": "text not null default 'null'",
+    },
+    "model_calls": {
+        "model": "text not null default ''",
+    },
     # v20: the lifecycle is a loop of scoped builds, so a project carries which build it is
     # on and the record of the ones that ended. closing v0 is how a business stops at v0.
     "projects": {
@@ -1514,6 +1527,8 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
 }
 
 LATER_INDEXES = (
+    # needs `model`, which only exists after _add_columns on a db older than v38
+    "create index if not exists model_calls_model on model_calls (lane_id, model, created_date)",
     # needs `relation`, which only exists after _add_columns on a db older than v11
     "create index if not exists agent_spawns_task on agent_spawns (task_id, relation, status)",
     # the sweep reads this one index and nothing else: a scan here is a sweep that

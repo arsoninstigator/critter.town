@@ -144,6 +144,9 @@ one connected model key: a provider, a base url, a model, and the name of the en
 carries the key (never the value). a lane's allowance is optional and is whatever its provider enforces,
 in tokens or requests per minute, hour or day. a lane with no stated allowance is uncapped and no
 number is supplied for it. a crew holds many lanes and a run takes the one with the most room.
+one key can serve several models, each with its own allowance (100k tokens a day for one, 2m for
+another), and a day can reset at a wall clock time in a named zone (12:00 America/New_York) instead of
+the utc boundary. a model with no entry is uncapped and never inherits another model's cap.
 
 ### escalation
 a decision put to a person in four lines: what happened, what the org already tried, the decision

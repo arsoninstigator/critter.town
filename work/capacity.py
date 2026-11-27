@@ -40,14 +40,60 @@ FALLBACK_COOLDOWN = 60.0
 STATES = ("active", "disabled")
 
 
-def window_start(window: str, at: float | None = None) -> float:
-    """the start of the window a moment falls in. a day is a utc day, the same as the cents ledger,
-    so two ledgers in one crew never disagree about which day a call belongs to."""
+def parse_reset(reset: Any) -> dict | None:
+    """`{"at": "12:00", "tz": "America/New_York"}`, or None for the utc boundary. a provider resets
+    at a wall clock time in a zone, and a fixed utc offset would be wrong for half the year wherever
+    that zone observes daylight saving, so the zone is a name and the database does the arithmetic."""
+    if reset in (None, {}, ""):
+        return None
+    if not isinstance(reset, dict):
+        raise ValidationError("a reset is {\"at\": \"HH:MM\", \"tz\": \"Area/City\"}", reset=reset)
+    text = str(reset.get("at") or "").strip()
+    parts = text.split(":")
+    try:
+        hour, minute = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+        if len(parts) > 2 or not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError
+    except (ValueError, IndexError):
+        raise ValidationError("a reset time is HH:MM on a 24 hour clock", at=text)
+    zone = str(reset.get("tz") or "").strip()
+    # the tz database keeps legacy names like EST and CET as real zones, but they are fixed offsets
+    # with no daylight saving, so accepting one would pin a reset to winter time all year. a region
+    # zone (Area/City) follows the provider's actual clock, and UTC is the one flat zone that is
+    # honest about being flat.
+    if zone != "UTC" and "/" not in zone or zone.startswith("Etc/"):
+        raise ValidationError("a reset names an IANA region zone like America/New_York, never an "
+                              "abbreviation like EST or a fixed offset: those ignore daylight "
+                              "saving, so the reset would drift an hour for half the year", tz=zone)
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo(zone)
+    except Exception:
+        raise ValidationError("that is not an IANA zone name", tz=zone)
+    return {"at": f"{hour:02d}:{minute:02d}", "tz": zone}
+
+
+def window_start(window: str, at: float | None = None, reset: dict | None = None) -> float:
+    """the start of the window a moment falls in. with no reset stated a day is a utc day, the same
+    as the cents ledger. with one, a day starts at the most recent time the wall clock in that zone
+    read the reset time, so 12:00 America/New_York is 17:00 utc in winter and 16:00 in summer."""
     if window not in WINDOWS:
         raise ValidationError(f"window must be one of {sorted(WINDOWS)}", window=window)
     span = WINDOWS[window]
     moment = now() if at is None else at
-    return moment - (moment % span)
+    if not reset or window != "day":
+        # minute and hour windows have no wall clock anchor: a provider's per minute limit is rolling
+        return moment - (moment % span)
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    zone = ZoneInfo(reset["tz"])
+    hour, minute = (int(x) for x in reset["at"].split(":"))
+    local = datetime.fromtimestamp(moment, zone)
+    anchor = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if anchor > local:
+        anchor = (local - timedelta(days=1)).replace(hour=hour, minute=minute, second=0,
+                                                       microsecond=0)
+    return anchor.timestamp()
 
 
 def reset_in(headers: dict | None, at: float) -> float | None:
@@ -135,10 +181,12 @@ class Capacity:
             "token_env": row["token_env"], "state": row["state"],
             "limits": loads(row["limits"], {}), "cooling_until": row["cooling_until"],
             "weight": row["weight"], "created_date": row["created_date"],
+            "models": loads(row["models"], {}), "reset": loads(row["reset"], None)
         }
 
     def connect(self, team_id: str, label: str, provider: str, base_url: str, model: str,
-                token_env: str, limits: dict | None = None, weight: float = 1.0) -> dict:
+                token_env: str, limits: dict | None = None, weight: float = 1.0,
+                models: dict | None = None, reset: dict | None = None) -> dict:
         """connect one key. the allowance is optional and so is every number in it: a lane with
         no stated limit is uncapped, and the response says so instead of supplying a default."""
         if not self.store.one("select id from teams where id = ?", (team_id,)):
@@ -160,6 +208,8 @@ class Capacity:
             raise ValidationError("a lane names the model it serves")
         provider = " ".join(str(provider or "").lower().split()) or "unknown"
         cleaned = self.clean_limits(limits)
+        per_model = self.clean_models(models)
+        stated_reset = parse_reset(reset)
         try:
             weight = float(weight)
         except (TypeError, ValueError):
@@ -173,12 +223,13 @@ class Capacity:
         with self.store.tx() as c:
             c.execute(
                 """insert into model_lanes (id, team_id, label, provider, base_url, model,
-                       token_env, state, limits, cooling_until, weight, created_date)
-                   values (?,?,?,?,?,?,?, 'active', ?, 0, ?, ?)""",
+                       token_env, state, limits, cooling_until, weight, created_date,
+                       models, reset)
+                   values (?,?,?,?,?,?,?, 'active', ?, 0, ?, ?, ?, ?)""",
                 (lane_id, team_id, label, provider, base_url, model, token_env,
-                 dumps(cleaned), weight, now()))
+                 dumps(cleaned), weight, now(), dumps(per_model), dumps(stated_reset)))
         lane = self._lane(lane_id)
-        lane["capped"] = bool(cleaned)
+        lane["capped"] = bool(cleaned or per_model)
         return lane
 
     def clean_limits(self, limits: dict | None) -> dict:
@@ -205,6 +256,41 @@ class Capacity:
                         "unlimited and means the reverse", kind=kind, window=window)
                 out.setdefault(kind, {})[window] = number
         return out
+
+    def clean_models(self, models: dict | None) -> dict:
+        """one key serves several models and a provider meters each on its own: `{"gpt-4o":
+        {"tokens": {"day": 100000}}, "gpt-4o-mini": {"tokens": {"day": 2000000}}}`. a model with no
+        entry is uncapped. it never inherits another model's cap, since that would be a number the
+        provider did not state."""
+        out: dict = {}
+        for name, limits in (models or {}).items():
+            name = str(name or "").strip()
+            if not name:
+                raise ValidationError("a model entry needs the model's name")
+            out[name] = self.clean_limits(limits)
+        return out
+
+    def set_models(self, lane_id: str, models: dict | None) -> dict:
+        self._lane(lane_id)
+        with self.store.tx() as c:
+            c.execute("update model_lanes set models = ? where id = ?",
+                      (dumps(self.clean_models(models)), lane_id))
+        return self._lane(lane_id)
+
+    def set_reset(self, lane_id: str, reset: dict | None) -> dict:
+        self._lane(lane_id)
+        with self.store.tx() as c:
+            c.execute("update model_lanes set reset = ? where id = ?",
+                      (dumps(parse_reset(reset)), lane_id))
+        return self._lane(lane_id)
+
+    def limits_for(self, lane: dict, model: str | None) -> dict:
+        """the limits that apply to a call: the model's own entry when it has one, otherwise the
+        lane's whole-key limits. a model that is named but has no entry and no whole-key limits is
+        uncapped."""
+        if model and model in (lane.get("models") or {}):
+            return lane["models"][model]
+        return lane.get("limits") or {}
 
     def set_limits(self, lane_id: str, limits: dict | None) -> dict:
         self._lane(lane_id)
@@ -234,7 +320,7 @@ class Capacity:
     # ---- measuring -----------------------------------------------------
     def record(self, lane_id: str, run_id: str | None, usage: dict | None,
                headers: dict | None = None, status: int = 200, estimated: bool = False,
-               at: float | None = None) -> dict:
+               at: float | None = None, model: str | None = None) -> dict:
         """one call, as the provider reported it. `usage` is the provider's own block (`prompt_tokens`
         and `completion_tokens`, or `input_tokens` and `output_tokens`). a call whose provider sent no
         usage block is recorded as unmeasured with zero tokens, and never given a guessed count."""
@@ -248,10 +334,11 @@ class Capacity:
         with self.store.tx() as c:
             c.execute(
                 """insert into model_calls (id, team_id, lane_id, run_id, tokens_in, tokens_out,
-                       measured, estimated, status, created_date)
-                   values (?,?,?,?,?,?,?,?,?,?)""",
+                       measured, estimated, status, created_date, model)
+                   values (?,?,?,?,?,?,?,?,?,?,?)""",
                 (call_id, lane["team_id"], lane_id, run_id, tokens_in or 0, tokens_out or 0,
-                 1 if measured else 0, 1 if estimated else 0, int(status), moment))
+                 1 if measured else 0, 1 if estimated else 0, int(status), moment,
+                 model or lane["model"]))
         cooled = None
         if int(status) == 429:
             wait = reset_in(headers, moment)
@@ -263,23 +350,41 @@ class Capacity:
         return {"id": call_id, "lane_id": lane_id, "tokens": (tokens_in or 0) + (tokens_out or 0),
                 "measured": measured, "estimated": estimated, "cooling_until": cooled}
 
-    def used(self, lane_id: str, window: str, at: float | None = None) -> dict:
+    def used(self, lane_id: str, window: str, at: float | None = None,
+             model: str | None = None) -> dict:
         """what this lane has consumed in the window the moment falls in. measured and estimated
         are returned apart, so a reader can see how much of the figure is the provider's word."""
         moment = now() if at is None else at
-        since = window_start(window, moment)
+        since = window_start(window, moment, self._lane(lane_id).get("reset"))
+        model_clause, model_args = ("", ())
+        if model:
+            model_clause, model_args = " and model = ?", (model,)
         row = self.store.one(
             """select coalesce(sum(case when estimated = 0 then tokens_in + tokens_out end), 0) as m,
                       coalesce(sum(case when estimated = 1 then tokens_in + tokens_out end), 0) as e,
                       count(*) as n,
                       coalesce(sum(case when status = 429 then 1 else 0 end), 0) as refused
-               from model_calls where lane_id = ? and created_date >= ?""", (lane_id, since))
+               from model_calls where lane_id = ? and created_date >= ?""" + model_clause,
+            (lane_id, since) + model_args)
         return {"window": window, "since": since, "measured_tokens": int(row["m"]),
                 "estimated_tokens": int(row["e"]), "requests": int(row["n"]),
                 "refused": int(row["refused"])}
 
+    def next_reset(self, lane: dict, window: str, at: float) -> float:
+        """when this window next rolls over, so a reading can say when a spent lane comes back."""
+        started = window_start(window, at, lane.get("reset"))
+        if window == "day" and lane.get("reset"):
+            from datetime import datetime, timedelta
+            from zoneinfo import ZoneInfo
+            local = datetime.fromtimestamp(started, ZoneInfo(lane["reset"]["tz"]))
+            hour, minute = (int(x) for x in lane["reset"]["at"].split(":"))
+            following = (local + timedelta(days=1)).replace(hour=hour, minute=minute,
+                                                            second=0, microsecond=0)
+            return following.timestamp()
+        return started + WINDOWS[window]
+
     # ---- room ----------------------------------------------------------
-    def room(self, lane: dict, at: float | None = None) -> dict:
+    def room(self, lane: dict, at: float | None = None, model: str | None = None) -> dict:
         """how much this lane can still take, the most constrained window deciding.
 
         a lane with no limits returns room of None, which is not zero and not a large number: it
@@ -295,15 +400,18 @@ class Capacity:
             return {"usable": False, "why": "key_not_set", "remaining": None,
                     "env": lane["token_env"]}
         tightest: dict | None = None
-        for kind, windows in (lane["limits"] or {}).items():
+        asked = model or lane["model"]
+        for kind, windows in (self.limits_for(lane, asked) or {}).items():
             for window, cap in windows.items():
-                used = self.used(lane["id"], window, moment)
+                used = self.used(lane["id"], window, moment,
+                                 model=asked if asked in (lane.get("models") or {}) else None)
                 spent = used["measured_tokens"] + used["estimated_tokens"] if kind == "tokens" \
                     else used["requests"]
                 left = cap - spent
                 fraction = left / cap
                 entry = {"kind": kind, "window": window, "cap": cap, "used": spent,
-                         "left": left, "fraction": fraction}
+                         "left": left, "fraction": fraction, "model": asked,
+                         "resets": self.next_reset(lane, window, moment)}
                 if tightest is None or fraction < tightest["fraction"]:
                     tightest = entry
         if tightest is None:
@@ -325,11 +433,12 @@ class Capacity:
         moment = now() if at is None else at
         candidates, skipped = [], []
         for lane in self.lanes(team_id):
-            if model and lane["model"] != model:
+            serves = {lane["model"], *(lane.get("models") or {}).keys()}
+            if model and model not in serves:
                 skipped.append({"lane_id": lane["id"], "label": lane["label"],
                                 "why": "other_model"})
                 continue
-            room = self.room(lane, moment)
+            room = self.room(lane, moment, model=model)
             if not room["usable"]:
                 skipped.append({"lane_id": lane["id"], "label": lane["label"], "why": room["why"]})
                 continue
@@ -347,7 +456,8 @@ class Capacity:
                                "every lane is cooling, spent, disabled or has no key set")}
         candidates.sort(key=lambda item: (-item[0], -item[1], item[2]["label"]))
         score, _, lane, room = candidates[0]
-        return {"lane": lane, "room": room, "skipped": skipped, "reason": ""}
+        return {"lane": lane, "room": room, "skipped": skipped, "reason": "",
+                "model": model or lane["model"]}
 
     # ---- reading -------------------------------------------------------
     def reading(self, team_id: str, at: float | None = None) -> dict:
@@ -355,8 +465,13 @@ class Capacity:
         out = []
         for lane in self.lanes(team_id):
             windows = {w: self.used(lane["id"], w, moment) for w in WINDOWS}
-            out.append({"lane": lane, "capped": bool(lane["limits"]),
-                        "room": self.room(lane, moment), "used": windows})
+            per_model = {name: self.room(lane, moment, model=name)
+                         for name in (lane.get("models") or {})}
+            out.append({"lane": lane, "capped": bool(lane["limits"] or lane.get("models")),
+                        "room": self.room(lane, moment), "used": windows,
+                        "models": per_model,
+                        "reset": lane.get("reset") or {"at": "00:00", "tz": "UTC",
+                                                       "stated": False}})
         return {"team_id": team_id, "lanes": out,
                 "capped_lanes": sum(1 for item in out if item["capped"]),
                 "note": ("a lane with no stated allowance is not capped, and no number is "

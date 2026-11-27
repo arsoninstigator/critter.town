@@ -426,7 +426,7 @@ def create_api(app: App | None = None) -> FastAPI:
         return app.capacity.connect(
             team_id, body.get("label", ""), body.get("provider", ""), body.get("base_url", ""),
             body.get("model", ""), body.get("token_env", ""), body.get("limits"),
-            body.get("weight", 1.0))
+            body.get("weight", 1.0), body.get("models"), body.get("reset"))
 
     @api.get("/crews/{team_id}/lanes")
     def list_lanes(team_id: str) -> dict:
@@ -437,6 +437,14 @@ def create_api(app: App | None = None) -> FastAPI:
     def set_lane_limits(lane_id: str, body: dict) -> dict:
         return app.capacity.set_limits(lane_id, body.get("limits"))
 
+    @api.post("/lanes/{lane_id}/models")
+    def set_lane_models(lane_id: str, body: dict) -> dict:
+        return app.capacity.set_models(lane_id, body.get("models"))
+
+    @api.post("/lanes/{lane_id}/reset")
+    def set_lane_reset(lane_id: str, body: dict) -> dict:
+        return app.capacity.set_reset(lane_id, body.get("reset"))
+
     @api.post("/lanes/{lane_id}/state")
     def set_lane_state(lane_id: str, body: dict) -> dict:
         return app.capacity.set_state(lane_id, body.get("state", ""))
@@ -446,6 +454,7 @@ def create_api(app: App | None = None) -> FastAPI:
                   need_tokens: int = Query(0)) -> dict:
         app.crews.get_team(team_id)
         return app.capacity.pick(team_id, model=model, need_tokens=need_tokens)
+
 
     @api.get("/crews/{team_id}/lanes/share")
     def lane_share(team_id: str, window: str = Query("day")) -> dict:
