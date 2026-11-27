@@ -857,6 +857,77 @@ create table if not exists readable_checks (
 create index if not exists readable_checks_crew on readable_checks (team_id, created_date);
 create index if not exists readable_checks_run on readable_checks (run_id);
 
+-- v35: the second axis of an org chart. a surface has exactly one owning department; reaching into
+-- another's is a proposal the owner settles; a bloc lends seats for one objective with an expiry;
+-- a wing holds a veto in a domain and has nothing to grow.
+create table if not exists org_surfaces (
+    id text primary key,
+    team_id text not null,
+    name text not null,
+    owner_department_id text not null references departments(id) on delete cascade,
+    evidence text not null default '[]',
+    purpose text not null default '',
+    created_date double precision not null,
+    unique (team_id, name)
+);
+create table if not exists org_proposals (
+    id text primary key,
+    team_id text not null,
+    surface text not null,
+    owner_department_id text not null,
+    proposed_by text not null,
+    task_id text,
+    change text not null,
+    state text not null default 'open',
+    settled_by text,
+    answer text,
+    created_date double precision not null,
+    settled_date double precision
+);
+create index if not exists org_proposals_crew on org_proposals (team_id, state);
+create table if not exists org_blocs (
+    id text primary key,
+    team_id text not null,
+    name text not null,
+    objective text not null,
+    department_ids text not null default '[]',
+    state text not null default 'open',
+    closes_at double precision not null,
+    created_date double precision not null,
+    closed_date double precision
+);
+create table if not exists org_bloc_grants (
+    id text primary key,
+    bloc_id text not null references org_blocs(id) on delete cascade,
+    agent_id text not null references agents(id) on delete cascade,
+    expires_at double precision not null,
+    revoked_at double precision,
+    created_date double precision not null
+);
+create index if not exists org_bloc_grants_agent on org_bloc_grants (agent_id, expires_at);
+create table if not exists org_wings (
+    id text primary key,
+    team_id text not null,
+    name text not null,
+    domain text not null,
+    agent_ids text not null default '[]',
+    cadence text not null default '',
+    created_date double precision not null,
+    unique (team_id, domain)
+);
+create table if not exists org_vetoes (
+    id text primary key,
+    team_id text not null,
+    wing_id text not null references org_wings(id) on delete cascade,
+    task_id text not null,
+    by_agent_id text not null,
+    reason text not null,
+    created_date double precision not null,
+    lifted_date double precision,
+    lifted_by text
+);
+create index if not exists org_vetoes_card on org_vetoes (task_id, lifted_date);
+
 -- v34: a risk a person accepted, until a moment they named. a dismissal is not a deletion: the
 -- finding is recomputed from rows every time, and a lapsed acceptance comes back naming whoever
 -- gave it, because the second decision is theirs.

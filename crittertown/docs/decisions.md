@@ -1016,3 +1016,26 @@ nothing here stops a dispatch unless the crew said so. a crew states `posture.bl
 findings at or above that severity refuse the work before a lease or a token is spent; a crew that
 has stated nothing gets a reading on the run and no surprise. a gate that appears without being
 asked for reads as a bug, and the same reasoning that made phase checks opt-in applies here.
+
+## authority flows up, work flows across, and a lateral pull always ends
+
+critter.town already had the authority axis: a department reports upward and routing follows the chain.
+what it lacked was the second axis the owner's org notes describe, and without it the chain alone
+produces one queue where every seat can reach every surface and nobody can say who broke one.
+
+so a surface has exactly one owner and reaching across is a proposal, not an edit. a generic seat that
+could write anywhere would quietly become an admin, and the refusal is named (`surface_not_owned`)
+because a bounce with a reason is data and a silent skip is not.
+
+blocs and wings are the two lateral pulls and both are time-boxed or bounded by construction. a bloc
+needs an end in the future and caps every grant at it, because a bloc that outlives its objective is a
+department nobody named and it will start protecting itself. a wing refuses a budget and a growth
+target by name, because a wing with something to grow stops being a wing.
+
+nothing refuses by default except a veto. a crew that never adopted the axis is not stopped, a card
+naming no surface reads as clear, and `org.enforce` is the crew saying it wants the refusal. a veto
+always refuses because one that can be ignored is a suggestion, and it carries a reason because a veto
+without one is only an obstacle.
+
+delegation, convergence and the four-line escalation shape were already here (work/delegation.py,
+work/convergence.py) and were not rebuilt.

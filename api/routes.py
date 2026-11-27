@@ -419,6 +419,70 @@ def create_api(app: App | None = None) -> FastAPI:
     def card_statements(task_id: str) -> dict:
         return app.ledger.for_card(task_id)
 
+    # the second axis of the org chart: surface ownership, proposals, blocs, wings and vetoes
+    @api.get("/crews/{team_id}/org/axis")
+    def org_axis(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.axis.reading(team_id)
+
+    @api.post("/crews/{team_id}/org/surfaces")
+    def register_surface(team_id: str, body: dict) -> dict:
+        app.crews.get_team(team_id)
+        return app.axis.register_surface(
+            team_id, body.get("name", ""), body.get("owner_department_id", ""),
+            body.get("evidence") or [], body.get("purpose", ""))
+
+    @api.get("/crews/{team_id}/org/surfaces/{name}/access/{agent_id}")
+    def surface_access(team_id: str, name: str, agent_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.axis.may_act(agent_id, name)
+
+    @api.post("/crews/{team_id}/org/proposals")
+    def propose_change(team_id: str, body: dict) -> dict:
+        app.crews.get_team(team_id)
+        return app.axis.propose(body.get("agent_id", ""), body.get("surface", ""),
+                                body.get("change", ""), body.get("task_id"))
+
+    @api.get("/crews/{team_id}/org/proposals")
+    def list_proposals(team_id: str, state: str | None = Query(None)) -> dict:
+        app.crews.get_team(team_id)
+        return {"team_id": team_id, "proposals": app.axis.proposals(team_id, state=state)}
+
+    @api.post("/org/proposals/{proposal_id}/settle")
+    def settle_proposal(proposal_id: str, body: dict) -> dict:
+        return app.axis.settle(proposal_id, body.get("agent_id", ""),
+                               bool(body.get("accept")), body.get("answer", ""))
+
+    @api.post("/crews/{team_id}/org/blocs")
+    def form_bloc(team_id: str, body: dict) -> dict:
+        app.crews.get_team(team_id)
+        return app.axis.form_bloc(team_id, body.get("name", ""), body.get("objective", ""),
+                                  body.get("department_ids") or [], body.get("closes_at", 0))
+
+    @api.post("/org/blocs/{bloc_id}/lend")
+    def lend_seat(bloc_id: str, body: dict) -> dict:
+        return app.axis.lend(bloc_id, body.get("agent_id", ""), body.get("expires_at"))
+
+    @api.post("/org/blocs/{bloc_id}/close")
+    def close_bloc(bloc_id: str) -> dict:
+        return app.axis.close_bloc(bloc_id)
+
+    @api.post("/crews/{team_id}/org/wings")
+    def create_wing(team_id: str, body: dict) -> dict:
+        app.crews.get_team(team_id)
+        extra = {k: v for k, v in body.items() if k not in ("name", "domain", "agent_ids", "cadence")}
+        return app.axis.create_wing(team_id, body.get("name", ""), body.get("domain", ""),
+                                    body.get("agent_ids") or [], body.get("cadence", ""), **extra)
+
+    @api.post("/org/wings/{wing_id}/veto")
+    def veto_card(wing_id: str, body: dict) -> dict:
+        return app.axis.veto(wing_id, body.get("agent_id", ""), body.get("task_id", ""),
+                             body.get("reason", ""))
+
+    @api.post("/org/vetoes/{veto_id}/lift")
+    def lift_veto(veto_id: str, body: dict) -> dict:
+        return app.axis.lift(veto_id, body.get("agent_id", ""))
+
     # what the crew can reach, read off its own rows, and the risks a person accepted with a date
     @api.get("/crews/{team_id}/posture")
     def crew_posture(team_id: str) -> dict:

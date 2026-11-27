@@ -72,6 +72,7 @@ from work.ledger import Ledger
 from work.readable import Readable
 from work.phases import Phases
 from work.posture import Posture
+from org.axis import OrgAxis
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -150,6 +151,7 @@ class App:
     readable: Readable
     phases: Phases
     posture: Posture
+    axis: OrgAxis
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -299,6 +301,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # date on them. a crew that states what blocks gets a refusal at dispatch
     posture = Posture(store, crews=crews, audit=audit)
     runner.posture = posture
+    # the second axis of the org chart: who owns a surface, who is on loan, who may veto
+    axis = OrgAxis(store, departments=departments, kanban=kanban, audit=audit)
+    runner.axis = axis
     # an eval reads the crew and the same model the runner uses, so a candidate is
     # measured against the prompt the crew would actually send
     evals = EvalService(store, crews=crews, model=runner.model)
@@ -503,6 +508,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         readable=readable,
         phases=phases,
         posture=posture,
+        axis=axis,
         polls=polls,
         browsers=browsers,
         ops=ops,

@@ -793,3 +793,42 @@ the first blocking finding before a lease or a token is spent.
 routes: `GET /crews/{id}/posture`, `GET /crews/{id}/posture/inventory`,
 `GET /crews/{id}/posture/findings?severity=`, `POST /crews/{id}/posture/dismiss`,
 `GET /crews/{id}/posture/dismissals?include_expired=`. schema 34 adds `posture_dismissals`.
+
+## the second axis: who owns a surface, who is on loan, who may veto
+
+`org/axis.py` adds what departments never had. departments are the authority axis (parent, coordinator,
+chain, route, escalate). this is the axis across them, so one giant queue is not one giant blast radius.
+
+`register_surface` records a surface with exactly one owning department and the evidence its work is
+checked by; no evidence is refused, and a second owner is a `Conflict`. `may_act(agent, surface)`
+answers in order: the seat belongs to the owner, or the seat is on loan to a live bloc whose departments
+include the owner, or the surface is unowned (allowed and reported as such, so a crew that has not
+adopted the axis is not stopped). otherwise `surface_not_owned`.
+
+`propose` is the lawful way across: it records the change against the owner and refuses a seat that
+already may act. `settle` is only by a seat in the owning department and never by the author.
+`withdraw` is only by the author.
+
+`form_bloc` needs an objective, an end in the future and at least two departments. `lend` caps a grant at
+the bloc's own end, refuses a seat with no home department and a second live grant, and `close_bloc`
+revokes every grant. `overdue_blocs` names a bloc past its end without closing it, because whether the
+objective landed is somebody's decision.
+
+`create_wing` refuses `budget_cents`, `growth_target`, `target` and `quota` by name, takes one wing per
+domain, and needs members. `veto` needs a wing member and a reason, one live veto per card per wing;
+`lift` is only by the wing that placed it.
+
+`layer_of` reads `runtime.layer` (directive, division, seat; default seat). `may_declare` lets a seat
+answer its own layer or a lower one. `check_directive` flags a directive that names a function, a route,
+a sql verb or a url as a spec in disguise.
+
+at dispatch a card's `payload.surface` is read against the seat. a finding is recorded on the run and
+does not stop it, unless `orchestration.org.enforce` is true. a live veto always refuses, because a veto
+that can be ignored is a suggestion.
+
+routes: `GET /crews/{id}/org/axis`, `POST /crews/{id}/org/surfaces`,
+`GET /crews/{id}/org/surfaces/{name}/access/{agent_id}`, `POST|GET /crews/{id}/org/proposals`,
+`POST /org/proposals/{id}/settle`, `POST /crews/{id}/org/blocs`, `POST /org/blocs/{id}/lend`,
+`POST /org/blocs/{id}/close`, `POST /crews/{id}/org/wings`, `POST /org/wings/{id}/veto`,
+`POST /org/vetoes/{id}/lift`. schema 35 adds `org_surfaces`, `org_proposals`, `org_blocs`,
+`org_bloc_grants`, `org_wings` and `org_vetoes`.

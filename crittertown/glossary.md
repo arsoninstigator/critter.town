@@ -139,6 +139,21 @@ opens a gate with signed single-use tokens; the paper trail is the row, the ques
 travels to the crew channel, and one tap on the link decides it. links expire, are bound
 to one decision, and are refused after use. tables: `gates`, `gate_tokens`.
 
+### surface
+a named thing one department owns and is the only one allowed to change, registered with the evidence
+its work is checked by. a surface with no evidence is an intention. reaching into another
+department's surface is a proposal the owner settles, never an edit.
+
+### bloc
+a temporary alliance of at least two departments around one objective, lending seats as grants that
+expire with it. the seats keep their home department and go home when the bloc closes. a bloc with
+no end is a department nobody named.
+
+### wing
+a capability the whole org needs and no metric rewards (security review, legal, on-call). it holds a
+veto in its domain and takes no budget and no growth target, because a wing with something to grow has
+become a department with a nicer name.
+
 ### posture
 what a crew can reach, read off its own rows: the hosts its egress rails allow, the credentials the
 broker issued, the connectors it reads, the channels it speaks in, the skills it can load and which
