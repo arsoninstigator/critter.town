@@ -367,6 +367,15 @@ that makes it a claim: it composes every agent's context and every body of reach
 looks for the criteria in them, so a slice added later that happens to carry one fails there
 instead of quietly making the next metric meaningless.
 
+### wake
+
+a reason for a card to be worked: a trigger, a message, a person, a schedule. every wake is
+recorded before anything acts on it, and the decision table in `work/wake.py` says what
+happens to it: `run` if nothing holds the card, `coalesce` if a run is already on it,
+`defer` if a person owes the card a decision, `refuse` if the card is closed or out of
+attempts. the point is the second wake: a wake that arrives while another agent holds the
+card joins that run instead of being refused.
+
 ### mandate
 
 what a seat is told about how it works: its role and its instructions, as opposed to the

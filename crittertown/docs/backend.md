@@ -215,7 +215,26 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
-### a mandate is checked against the card it carries
+### a wake is recorded before it is acted on
+
+`work/wake.py` holds one pure table, `decide(task, holder, attempts, max_attempts, live_run,
+agent_id)`, and a thin queue around it. the decisions, first match wins: a card in `done` or
+`blocked` is refused with its column named; `review` defers because a person owes the
+decision; `backlog` refuses because a card nobody scheduled is not woken by a trigger; an
+exhausted card refuses; a live holder that is not the asking agent coalesces onto its run; the
+holder asking again is a replay and coalesces too; otherwise the wake runs.
+
+`WakeQueue.admit` reuses the pending wake for a card rather than adding a second, writes the
+decision with its reason, and `dispatch` returns that decision instead of raising when it is
+not `run`. `delivered` marks the wake that became a run, and `settle(run_id, outcome)` puts a
+coalesced wake back to pending when its run ends, because the run had no way to know it had
+absorbed it. `revive(team_id)` brings deferred wakes back once the card leaves review, and
+`dispatch_ready` calls it first: a deferral nobody revives is a drop with better manners.
+
+routes: `POST /crews/{id}/wakes` with `task_id`, `source`, optional `note` and `agent_id`, and
+`GET /crews/{id}/wakes` for the wakes still owed an answer.
+
+## a mandate is checked against the card it carries
 
 `manage/mandate.py` finds identifier-shaped tokens (endpoint paths, snake_case identifiers,
 kebab-case test ids) in an agent's role and instructions, and compares them with the

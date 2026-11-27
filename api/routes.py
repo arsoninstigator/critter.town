@@ -437,6 +437,26 @@ def create_api(app: App | None = None) -> FastAPI:
                                   reason="missing_target")
         return app.mandate.check(team_id, agent_id, task_id)
 
+    # a wake is a reason for a card to be worked. raising one records the reason before
+    # anything acts on it, so a trigger that fires while another agent holds the card is
+    # joined or kept rather than lost
+    @api.post("/crews/{team_id}/wakes")
+    def raise_wake(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        task_id = str(data.get("task_id") or "").strip()
+        if not task_id:
+            raise ValidationError("a wake needs a task_id", reason="missing_task")
+        task = app.kanban.get_task(task_id)
+        if task["team_id"] != team_id:
+            raise ValidationError("that card belongs to another crew", reason="wrong_crew")
+        return app.wakes.admit(task, agent_id=str(data.get("agent_id") or ""),
+                               source=str(data.get("source") or "api"),
+                               note=str(data.get("note") or ""))
+
+    @api.get("/crews/{team_id}/wakes")
+    def list_wakes(team_id: str, limit: int = Query(50)) -> dict:
+        return {"wakes": app.wakes.open(team_id, limit=limit)}
+
     @api.get("/cards/{task_id}/mandate/vocabulary")
     def mandate_vocabulary(task_id: str) -> dict:
         task = app.kanban.get_task(task_id)

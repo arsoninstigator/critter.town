@@ -799,3 +799,28 @@ pattern across ten. `strict=True` keeps the refusal for a crew that asks for it.
 the limit worth naming: on a board with one card and no knowledge, nothing else exists to
 compare against, so the check falls back to endpoint paths only and says so. a thin board
 gets a thin check rather than a loud wrong one.
+
+## a wake joins the run already on the card, and nothing about it is dropped
+
+the second wake was the bug. an agent's message or a trigger arrived while another agent
+held the card, custody answered `Conflict: not_holder`, and the reason to work was gone.
+nobody had recorded that someone had asked, so the only way back was a person noticing.
+
+paperclip's wake queue states the rule the other way round, and it is right: a wake runs the
+card, joins the run already on it, or waits behind it, and refusing is reserved for a card
+that genuinely cannot be woken. four decisions here, each a fact about the card row rather
+than a guess about intent, so the table is a pure function and can be argued with: closed or
+blocked refuses with the column named, review defers because a person owes the decision,
+backlog refuses because an unscheduled card is not woken by a trigger, exhausted refuses, a
+live holder coalesces, the holder asking again is a replay, and otherwise it runs.
+
+two things make coalescing safe rather than a shrug. the queue reuses the pending wake for a
+card instead of adding a second, so one card has one reason to work no matter how many
+triggers fire. and when a run ends, the wakes that joined it go back to pending: the run had
+no way to know it had absorbed them, so the next admission decides them on the card's merits
+and records the refusal if that is the answer. a deferral is revived by `dispatch_ready` once
+the card leaves review, because a deferral nobody revives is a drop with better manners.
+
+the alternative we rejected was making the conflict retryable at the caller. that puts the
+same decision in every trigger, schedule and message handler, and the handler that forgets is
+the one that loses the wake.

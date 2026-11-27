@@ -52,6 +52,7 @@ from work.routines import RoutineService
 from work.workflows import WorkflowService
 from work.custody import Custody
 from work.liveness import Liveness
+from work.wake import WakeQueue
 from work.evals import EvalService
 from work.convergence import ConvergenceService
 from work.delegation import DelegationService
@@ -109,6 +110,7 @@ class App:
     comms_gateway: CommsGateway
     sagas: SagaService
     custody: Custody
+    wakes: WakeQueue
     liveness: Liveness
     evals: EvalService
     convergence: ConvergenceService
@@ -260,6 +262,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     custody = Custody(store)
     liveness = Liveness(store, kanban)
     runner.custody = custody
+    # every reason to work is recorded before it is acted on, so a wake that cannot run
+    # now joins the run already on the card or waits behind a person instead of vanishing
+    wakes = WakeQueue(store)
+    runner.wakes = wakes
     # an eval reads the crew and the same model the runner uses, so a candidate is
     # measured against the prompt the crew would actually send
     evals = EvalService(store, crews=crews, model=runner.model)
@@ -420,6 +426,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         comms_gateway=comms_gateway,
         sagas=sagas,
         custody=custody,
+        wakes=wakes,
         liveness=liveness,
         evals=evals,
         convergence=convergence,

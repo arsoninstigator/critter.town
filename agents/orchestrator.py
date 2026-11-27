@@ -70,6 +70,9 @@ class CrewRunner:
         # set by the composition root: a mandate that names the card is a script for one
         # card, so the check runs when the card is handed over
         self.mandate = None
+        # set by the composition root: a reason to work is recorded before it is acted on,
+        # so a wake that cannot run now is joined or kept instead of lost
+        self.wakes = None
         self.crews = CrewService(store, registry)
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
@@ -156,6 +159,24 @@ class CrewRunner:
             raise NotAllowed(
                 f"{agent['name']} is a sidecar on another card; a sidecar cannot own one"
             )
+        # a wake that arrives while another agent holds this card used to come back as a
+        # conflict and vanish. the queue decides instead: run it, join the run already on
+        # it, wait behind a person, or refuse with a reason. only `run` continues here
+        wake: dict | None = None
+        if self.wakes is not None:
+            wake = self.wakes.admit(task, agent_id=agent["id"], source=actor)
+            if wake["decision"] != "run":
+                return {
+                    "run_id": "",
+                    "task": task,
+                    "agent": {"id": agent["id"], "name": agent["name"]},
+                    "decision": wake["decision"],
+                    "reason": wake["reason"],
+                    "wake": wake,
+                    "steps": [],
+                    "result": {},
+                    "error": "",
+                }
         if self.guardrails is not None:
             self.guardrails.enforce(
                 task["team_id"], "dispatch",
@@ -200,6 +221,8 @@ class CrewRunner:
         try:
             provider, handle = self._sandbox(agent, task)
             self._insert_run(run_id, task, agent, provider.name, handle.ref)
+            if wake is not None:
+                self.wakes.delivered(wake["wake_id"], run_id)
             inbox = self.a2a.inbox(agent["id"], limit=10)
             context = self.crews.context(task["team_id"])["values"]
             intent_block = self.intent.prompt(team["id"], agent["id"]) if self.intent else ""
@@ -305,6 +328,9 @@ class CrewRunner:
                     except CritterTownError:
                         pass
             self._retire_sidecars(task_id)
+            if self.wakes is not None:
+                # a wake that joined this run is not answered by a run that broke
+                self.wakes.settle(run_id, outcome="failed")
             if self.events_hook is not None:
                 self.events_hook("run.failed", {
                     "team_id": task["team_id"], "task_id": task_id, "run_id": run_id,
@@ -324,6 +350,8 @@ class CrewRunner:
             self._retire_sidecars(task_id)
 
         self._update_run(run_id, steps, status="succeeded")
+        if self.wakes is not None:
+            self.wakes.settle(run_id, outcome="succeeded")
         self.crews.update_agent(agent["id"], status="idle")
         self.crews.put_context(
             task["team_id"],
@@ -368,6 +396,10 @@ class CrewRunner:
         }
 
     def dispatch_ready(self, team_id: str, limit: int = 10, max_turns: int = 6) -> list[dict]:
+        if self.wakes is not None:
+            # a wake deferred behind a person comes back on its own once the card leaves
+            # review, because a deferral nobody revives is a drop with better manners
+            self.wakes.revive(team_id)
         ready = self.kanban.list_tasks(team_id, column="ready", limit=limit)
         if not ready:
             return []
