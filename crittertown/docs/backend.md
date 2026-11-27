@@ -215,7 +215,26 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
-### the seal carries a fingerprint
+### a mandate is checked against the card it carries
+
+`manage/mandate.py` finds identifier-shaped tokens (endpoint paths, snake_case identifiers,
+kebab-case test ids) in an agent's role and instructions, and compares them with the
+vocabulary of the card it is about to be given. that vocabulary is derived, not listed: the
+terms the card uses that no other card, knowledge doc or context entry uses. a match is a
+finding naming the line, the kind and the term.
+
+two rules keep it usable. a dispatch is never stopped by a finding: it lands in the run's
+`mandate_findings`, and an audit row `mandate.overfit` is recorded against the card, so a
+pattern across cards becomes visible and a false positive on a word costs nothing.
+`for_dispatch(strict=True)` exists for a crew that wants the refusal, and refuses with
+`mandate_names_the_card`. on a board with nothing else to compare against, only endpoint
+paths are named, because saying "everything is distinctive" would flag every identifier a
+seat legitimately uses.
+
+routes: `POST /crews/{id}/mandate/check` with `agent_id` and `task_id`, and
+`GET /cards/{id}/mandate/vocabulary` for the terms a mandate must not name.
+
+## the seal carries a fingerprint
 
 `holdout.seal()` writes a digest over the sealed criteria into `holdout_seals`, and every
 scenario row keeps its own digest. `state()` reports `tampered` as the scenarios that moved,

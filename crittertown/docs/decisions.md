@@ -774,3 +774,28 @@ the hash would make an honest re-seal look like a new one.
 the half we had: `already_sealed` refused a second seal, which is the same instinct reaching
 only the obvious door. the general rule from that submission is that a claim about criteria
 has to be checkable by whoever is being measured, and a promise is not checkable.
+
+## a mandate names how a seat works, and the check derives its vocabulary from the board
+
+band's harness scans every seat mandate against a list of the problem's distinctive
+identifiers, and a match disqualifies the entry: a mandate that names the answer is a script
+for one problem wearing a role's clothes. their shapes are the part worth keeping, and they
+are kept exactly: an endpoint path, a snake_case identifier and a kebab-case test id are the
+three ways a specific answer shows up in prose, and prose, numbers and quoted fragments are
+not evidence of anything.
+
+the vocabulary is the part that could not come across. theirs is generated from the specs,
+which exist for a tournament and do not exist here. an allowlist of banned words would be a
+list of our own guesses, and it would fail a seat for using a word the board taught it. so
+the vocabulary is derived per card: the terms this card uses that no other card, knowledge
+doc, or context entry uses. a term in any of those is a term every seat may legitimately
+know, which is what "generic" actually means here.
+
+the other difference is what a finding does. their check disqualifies, because a tournament
+has to rank. here a finding is recorded against the card and the run goes ahead: a false
+positive on a word must not cost a dispatch, and one card's finding is worth less than the
+pattern across ten. `strict=True` keeps the refusal for a crew that asks for it.
+
+the limit worth naming: on a board with one card and no knowledge, nothing else exists to
+compare against, so the check falls back to endpoint paths only and says so. a thin board
+gets a thin check rather than a loud wrong one.

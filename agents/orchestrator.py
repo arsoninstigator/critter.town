@@ -67,6 +67,9 @@ class CrewRunner:
         self.knowledge = None
         # set by the composition root: the prompt is assembled from slices
         self.context = None
+        # set by the composition root: a mandate that names the card is a script for one
+        # card, so the check runs when the card is handed over
+        self.mandate = None
         self.crews = CrewService(store, registry)
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
@@ -159,6 +162,13 @@ class CrewRunner:
                 {"agent_id": agent["id"], "tools": agent.get("tools") or []},
                 task=task,
             )
+        # the seat's mandate is read against the card it is about to carry. this records
+        # a finding and never stops the work: a false positive on a word must not cost a
+        # dispatch, and a pattern across cards is the thing worth seeing
+        mandate_findings: list[dict] = []
+        if self.mandate is not None:
+            checked = self.mandate.for_dispatch(task, agent)
+            mandate_findings = checked.get("findings") or []
         # a card may declare the shape it wants, and the one refusal is a card that
         # asks for orchestration its own signals do not justify: that shape costs seats,
         # tokens and a convergence, and it is what a big-feeling task asks for
@@ -354,6 +364,7 @@ class CrewRunner:
             "steps": steps,
             "result": result,
             "error": error,
+            "mandate_findings": mandate_findings,
         }
 
     def dispatch_ready(self, team_id: str, limit: int = 10, max_turns: int = 6) -> list[dict]:

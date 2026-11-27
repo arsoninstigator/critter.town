@@ -33,6 +33,7 @@ from agents.crews import CrewService
 from manage.guardrails import GuardrailService
 from manage.knowledge.base import KnowledgeBase
 from manage.lessons import LessonService
+from manage.mandate import MandateService
 from org.departments import DepartmentService
 from org.intent import IntentService
 from core.db import Store, open_store
@@ -90,6 +91,7 @@ class App:
     # already knows
     guardrails: GuardrailService
     lessons: LessonService
+    mandate: MandateService
     context: ContextSlicer
     knowledge: KnowledgeBase
     triggers: TriggerService
@@ -247,6 +249,11 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     lessons = LessonService(store, profile=profile, crews=crews, audit=audit)
     knowledge = KnowledgeBase(store, crews=crews, audit=audit)
     runner.knowledge = knowledge
+    # a seat's mandate says how it works; this check says whether it names the card in
+    # front of it, and records that at the moment the card is handed over
+    mandate = MandateService(store, crews=crews, kanban=kanban, knowledge=knowledge,
+                             audit=audit)
+    runner.mandate = mandate
     pov.profile = profile
     # custody is what makes a dispatched card recoverable: the runner takes a lease,
     # and a holder that dies leaves an expiry rather than a mystery
@@ -397,6 +404,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         context=context,
         guardrails=guardrails,
         lessons=lessons,
+        mandate=mandate,
         knowledge=knowledge,
         pov=pov,
         audit=audit,

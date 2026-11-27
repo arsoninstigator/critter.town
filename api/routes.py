@@ -424,6 +424,28 @@ def create_api(app: App | None = None) -> FastAPI:
                                   skills_module.parse_skill_md(s))["name"]
                                   for s in templates_module.SHIPPED_SKILLS])
 
+    # a mandate says how a seat works. naming the card in front of it is how a seat
+    # becomes a script for one card, so the check is runnable before a person saves the
+    # instructions, not only at dispatch
+    @api.post("/crews/{team_id}/mandate/check")
+    def check_mandate(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        agent_id = str(data.get("agent_id") or "").strip()
+        task_id = str(data.get("task_id") or "").strip()
+        if not agent_id or not task_id:
+            raise ValidationError("a check needs an agent_id and a task_id",
+                                  reason="missing_target")
+        return app.mandate.check(team_id, agent_id, task_id)
+
+    @api.get("/cards/{task_id}/mandate/vocabulary")
+    def mandate_vocabulary(task_id: str) -> dict:
+        task = app.kanban.get_task(task_id)
+        vocabulary = app.mandate.vocabulary(task["team_id"], task_id)
+        # the terms are the card's own, so this is the one view that says what a mandate
+        # must not name. it is not the acceptance criteria: nothing is hidden here
+        return {"task_id": task_id, "terms": vocabulary["terms"],
+                "thick": vocabulary["thick"], "derived_from": vocabulary["derived_from"]}
+
     @api.get("/crews/{team_id}/skills")
     def list_skills(team_id: str, include_disabled: bool = Query(False),
                     agent_id: str = Query("")) -> dict:

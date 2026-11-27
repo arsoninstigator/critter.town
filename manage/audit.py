@@ -599,7 +599,8 @@ class AuditService:
 
         if event in {"guardrail.set", "guardrail.retired", "guardrail.refused",
                      "lesson.proposed", "lesson.approved", "lesson.rejected",
-                     "lesson.promoted", "knowledge.recorded", "knowledge.updated"}:
+                     "lesson.promoted", "knowledge.recorded", "knowledge.updated",
+                     "mandate.overfit"}:
             agent_id = agent_of(context.get("agent_id"))
             if not agent_id:
                 return None
@@ -612,7 +613,7 @@ class AuditService:
                 actor_id=actor or agent_id,
                 target_kind=event.split(".")[0],
                 target_id=str(data.get("guardrail_id") or data.get("lesson_id")
-                              or data.get("entry_id") or ""),
+                              or data.get("entry_id") or data.get("task_id") or ""),
                 payload=data,
             )
 

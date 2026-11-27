@@ -367,6 +367,14 @@ that makes it a claim: it composes every agent's context and every body of reach
 looks for the criteria in them, so a slice added later that happens to carry one fails there
 instead of quietly making the next metric meaningless.
 
+### mandate
+
+what a seat is told about how it works: its role and its instructions, as opposed to the
+card in front of it, which says what the work is. `manage/mandate.py` checks the first
+against the second, because a mandate that names the card's own terms is a script for one
+card wearing a role's clothes. the check derives its vocabulary from the board: the terms
+this card uses that no other card, knowledge doc or context entry uses.
+
 ### seal fingerprint
 
 the digest a sealed holdout carries, taken over its criteria at seal time (`work/holdout.py`,
