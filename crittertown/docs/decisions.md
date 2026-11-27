@@ -863,3 +863,23 @@ judged on, and it was being spent on other cards' failures.
 the alternative we rejected was leaving the children in `ready` and letting the dispatcher
 notice at failure time. by then the lease is taken, the reservation is held, the run row
 exists and the attempt is spent, so the child has already been charged for its parent.
+
+## a correct outcome is the unit, and the baseline is our own earlier window
+
+every dark factory submission that measured anything measured money per correct outcome, and the
+ones that measured volume were measuring the wrong thing in a way that looked like success. the
+trap is subtle: a crew that retries more closes more cards, because retries are how a card gets
+closed, so cards per day rises while the work gets worse. one dossier cited 8.2 units per
+correct field against a baseline, and the number is meaningless without the baseline, which is
+the part most submissions skipped.
+
+so the division is by correct outcomes, and a retried card carries every attempt's spend into
+that one outcome. the baseline is the same query over the previous window of equal length, with
+the rule set travelling in the response. we rejected comparing against a published figure
+because a rival's number is measured on a rival's cards, and a figure nobody can re-run is an
+advertisement.
+
+the honest hole is spend we cannot see: a card that closed with no reservation has unknown
+spend, not free spend. `partial` and `correct_with_unknown_spend` say so, and a comparison
+involving a partial window answers `unknown` instead of a delta, because a cheaper number built
+from missing rows is worse than no number.

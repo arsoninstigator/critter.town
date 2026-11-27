@@ -584,3 +584,30 @@ routes: `GET /cards/{id}/lineage` returns the chain, `cycle` and the decision; `
 `deferred`, with the ancestor named on each.
 
 no schema change: the chain is already `tasks.parent_id`, and the reason already has a column.
+
+## what a correct outcome cost
+
+`work/efficiency.py`. `summarise(cards)` divides spend by correct outcomes and reports the raw
+counts beside the figure, so a reader can check the division: `cards`, `correct`, `rejected`,
+`spend_cents`, `cost_per_correct`, `cost_per_card`, plus `correct_with_unknown_spend` and
+`partial`. `rate()` returns None when nothing was correct, because no figure is honest there.
+
+the service reads three things in a window: tasks with `column_name`, `evidence_ref`,
+`assignee_agent_id` and `attempts`; settled `budget_reservations` grouped by `task_id`; and
+`task_events` rows of kind `moved` whose data goes from `review` to anything but `done`, which
+is one rejection each. a card is correct when its column is `done` and it carries an evidence
+reference, so a card in review is not yet an outcome and a blocked card is not written off as
+one.
+
+`for_crew(team_id, since, until)` returns the crew total, one block per agent sorted by cost per
+outcome (unknown last), the ten cards that cost money and closed nothing, and the ten cards that
+were retried or rejected, both by spend. `compare_windows(team_id, days)` measures the window and
+the previous window of equal length and returns `verdict` of cheaper, dearer, level or unknown,
+where unknown is what a window with unknown spend deserves. `compare()` puts the rule set in the
+response and marks `reproducible: true`, because the baseline is this same query over earlier
+rows, not a number borrowed from somewhere else.
+
+routes: `GET /crews/{id}/efficiency?days=7&compare=true` and `GET /cards/{id}/efficiency`.
+
+no schema change: the ledger already holds settled cents per task, and the review move already
+sits in `task_events`.

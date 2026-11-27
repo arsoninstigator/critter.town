@@ -43,6 +43,7 @@ from work import templates as templates_module
 from manage import attest
 from work import topology
 from core.app import App, build_app
+from core.db import now
 from comms.events import Event
 from core.errors import Conflict, CritterTownError, NotFound, ValidationError
 from agents.importers import SOURCES, import_workflow
@@ -486,6 +487,23 @@ def create_api(app: App | None = None) -> FastAPI:
     def crew_lineage(team_id: str, limit: int = Query(200)) -> dict:
         app.crews.get_team(team_id)
         return app.lineage.inherited(team_id, limit=limit)
+
+    # what a correct outcome cost. volume is not the measure: a card that needed three
+    # attempts and two rejections is one correct outcome at three attempts' cost
+    @api.get("/crews/{team_id}/efficiency")
+    def crew_efficiency(team_id: str, days: float = Query(7), compare: bool = Query(True)) -> dict:
+        app.crews.get_team(team_id)
+        until = now()
+        report = app.efficiency.for_crew(team_id, since=until - days * 86400.0, until=until)
+        if compare:
+            # the baseline is the same measurement over the previous window of equal length,
+            # not a published number from somewhere else
+            report["baseline"] = app.efficiency.compare_windows(team_id, days=days)
+        return report
+
+    @api.get("/cards/{task_id}/efficiency")
+    def card_efficiency(task_id: str) -> dict:
+        return app.efficiency.for_card(task_id)
 
     # a wake is a reason for a card to be worked. raising one records the reason before
     # anything acts on it, so a trigger that fires while another agent holds the card is

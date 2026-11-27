@@ -91,6 +91,15 @@ recomputes them and names what changed, was removed or appeared. it reports, it 
 reopens: re-running closed work spends money and reopening a card that drifted cosmetically
 spends attention. `GET /cards/{id}/drift` is one card, `GET /crews/{id}/drift` the crew.
 
+### efficiency
+money per correct outcome. spend is every settled reservation attached to the card, an outcome
+is a card in `done` with an evidence reference, and the division is by outcomes, not by cards.
+a card that took three attempts and two rejections is still one correct outcome, and counting
+it as one card makes the retries disappear; charging it at three attempts' cost makes them the
+story. a card with no reservation has unknown spend, which is reported as `partial` rather than
+read as zero. `GET /crews/{id}/efficiency` carries its own rules and a baseline over the
+previous window of equal length, so the number can be re-run by anyone.
+
 ### department
 the hierarchy, kept explicit: one coordinator, members reporting to it, departments that
 nest. routing a card to a department puts it on the coordinator's desk, and escalation
