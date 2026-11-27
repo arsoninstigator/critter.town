@@ -1092,3 +1092,15 @@ number, and the reset is a wall clock time in a region zone so daylight saving i
 problem and not ours. fixed offset names are refused on purpose: the tz database accepts `EST` as a real
 zone, which is exactly why checking that a zone exists was not enough. a window that is wrong by an hour
 for half the year would pass every test written against one date.
+
+## a proposal the owner has not answered is a decision the card depends on
+
+the second axis made reaching across a boundary a proposal, and stopped there: settling one flipped a
+row and nothing downstream noticed. so a card could close with its dependency undecided. the review gate
+already measures what a card owes from existing records, so this is one more measured requirement and not
+a new mechanism.
+
+an open proposal blocks and a refusal does not, deliberately. blocking on a no would turn the owner's
+answer into a hold on someone else's work. the refusal travels with the card instead, where a reviewer
+reads it. the first draft of that reading filtered on the word `rejected`, which the table never stores,
+so a refusal would have been silently invisible; the state is `declined`.

@@ -25,14 +25,17 @@ from work import phases as ph  # noqa: E402
 
 class PureTests(unittest.TestCase):
     def test_a_code_card_owes_its_questions_before_review(self):
-        self.assertEqual(ph.required_for("code", "review"), ("no_open_questions",))
+        self.assertEqual(ph.required_for("code", "review"),
+                         ("no_open_questions", "proposals_settled"))
 
     def test_a_code_card_owes_the_run_and_the_seal_before_it_closes(self):
         self.assertEqual(ph.required_for("code", "done"),
-                         ("no_open_questions", "succeeded_run", "sealed_suite"))
+                         ("no_open_questions", "proposals_settled", "succeeded_run",
+                          "sealed_suite"))
 
     def test_a_research_card_owes_only_its_questions(self):
-        self.assertEqual(ph.required_for("research", "done"), ("no_open_questions",))
+        self.assertEqual(ph.required_for("research", "done"),
+                         ("no_open_questions", "proposals_settled"))
 
     def test_a_column_nothing_is_declared_for_owes_nothing(self):
         self.assertEqual(ph.required_for("code", "in_progress"), ())
@@ -53,7 +56,8 @@ class PureTests(unittest.TestCase):
     def test_a_crew_table_replaces_only_the_kinds_it_names(self):
         table = ph._table({"code": {"done": ["succeeded_run"]}})
         self.assertEqual(table["code"]["done"], ("succeeded_run",))
-        self.assertEqual(table["research"]["done"], ("no_open_questions",))
+        self.assertEqual(table["research"]["done"],
+                         ("no_open_questions", "proposals_settled"))
 
     def test_an_unknown_requirement_is_not_silently_met(self):
         self.assertFalse(ph.met("vibes", {}))
@@ -310,3 +314,157 @@ class ServiceTests(AppCase):
         waived = client.post(f"/cards/{task['id']}/phase-waivers",
                              json={"column": "done", "reason": "shipping tonight"}).json()
         self.assertEqual(waived["column"], "done")
+
+
+class ProposalGateTests(AppCase):
+    """a card that asked another department to change its surface cannot be accepted while the owner
+    has not answered, because the work depends on a decision nobody has made yet."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.team = self.crew()
+        self.tid = self.team["id"]
+        crews = self.app.crews
+        self.anne = crews.add_agent(self.tid, "anne", role="doer")
+        self.ben = crews.add_agent(self.tid, "ben", role="doer")
+        self.support = self.app.departments.create(
+            self.tid, "support", coordinator_agent_id=self.anne["id"])
+        self.code = self.app.departments.create(
+            self.tid, "code", coordinator_agent_id=self.ben["id"])
+        self.app.axis.register_surface(self.tid, "code.repo", self.code["id"], ["commit:"])
+        self.app.crews.update_team(self.tid, orchestration={"phases": True})
+
+    def card(self, kind="research") -> dict:
+        return self.app.kanban.create_task(self.tid, "t", description="x", column="in_progress",
+                                           kind=kind)
+
+    def propose(self, card, change="rename the helper"):
+        return self.app.axis.propose(self.anne["id"], "code.repo", change, task_id=card["id"])
+
+    def move(self, card, column="review"):
+        return self.app.kanban.move(card["id"], column, "owner")
+
+    def test_an_open_proposal_blocks_review(self):
+        card = self.card()
+        self.propose(card)
+        with self.assertRaises(Conflict) as caught:
+            self.move(card)
+        self.assertEqual(caught.exception.details["unmet"][0]["requirement"], "proposals_settled")
+
+    def test_the_refusal_says_how_many_and_to_whom_they_wait(self):
+        card = self.card()
+        self.propose(card)
+        self.propose(card, "add a flag")
+        with self.assertRaises(Conflict) as caught:
+            self.move(card)
+        self.assertIn("2 proposals", caught.exception.message)
+        self.assertIn("waiting on its owner", caught.exception.message)
+
+    def test_an_open_proposal_blocks_done_too(self):
+        card = self.card()
+        self.move(card)
+        self.propose(card)
+        with self.assertRaises(Conflict):
+            self.move(card, "done")
+
+    def test_an_accepted_proposal_releases_the_card(self):
+        card = self.card()
+        proposal = self.propose(card)
+        self.app.axis.settle(proposal["id"], self.ben["id"], True, "fine")
+        self.assertEqual(self.move(card)["column"], "review")
+
+    def test_a_declined_proposal_also_releases_the_card_because_the_work_can_proceed_without_it(self):
+        card = self.card()
+        proposal = self.propose(card)
+        self.app.axis.settle(proposal["id"], self.ben["id"], False, "no, that is our helper")
+        self.assertEqual(self.move(card)["column"], "review")
+
+    def test_a_withdrawn_proposal_releases_the_card(self):
+        card = self.card()
+        proposal = self.propose(card)
+        self.app.axis.withdraw(proposal["id"], self.anne["id"])
+        self.assertEqual(self.move(card)["column"], "review")
+
+    def test_a_card_that_proposed_nothing_is_untouched(self):
+        self.assertEqual(self.move(self.card())["column"], "review")
+
+    def test_another_cards_proposal_does_not_block_this_one(self):
+        mine, theirs = self.card(), self.card()
+        self.propose(theirs)
+        self.assertEqual(self.move(mine)["column"], "review")
+
+    def test_a_proposal_with_no_card_blocks_nothing(self):
+        card = self.card()
+        self.app.axis.propose(self.anne["id"], "code.repo", "a change with no card")
+        self.assertEqual(self.move(card)["column"], "review")
+
+    def test_a_person_may_waive_it_with_a_reason(self):
+        card = self.card()
+        self.propose(card)
+        self.app.phases.waive(card["id"], "review", "human", "ben is out and this is urgent")
+        self.assertEqual(self.move(card)["column"], "review")
+
+    def test_the_reading_counts_open_ones(self):
+        card = self.card()
+        self.propose(card)
+        reading = self.app.phases.readiness(card["id"], to_column="review")
+        self.assertEqual(reading["measured"]["open_proposals"], 1)
+        self.assertFalse(reading["ready"])
+
+    def test_the_reading_carries_what_the_owner_refused_and_what_it_agreed(self):
+        card = self.card()
+        no = self.propose(card, "delete the helper")
+        yes = self.propose(card, "rename the helper")
+        self.app.axis.settle(no["id"], self.ben["id"], False, "that is load bearing")
+        self.app.axis.settle(yes["id"], self.ben["id"], True, "fine")
+        measured = self.app.phases.readiness(card["id"], to_column="review")["measured"]
+        self.assertEqual(measured["declined_proposals"][0]["answer"], "that is load bearing")
+        self.assertEqual(measured["accepted_proposals"][0]["change"], "rename the helper")
+        self.assertEqual(measured["open_proposals"], 0)
+
+    def test_a_crew_that_never_turned_phases_on_is_not_gated(self):
+        self.app.crews.update_team(self.tid, orchestration={"phases": False})
+        card = self.card()
+        self.propose(card)
+        self.assertEqual(self.move(card)["column"], "review")
+
+    def test_a_crew_table_can_drop_the_requirement(self):
+        self.app.crews.update_team(
+            self.tid, orchestration={"phases": {"research": {"review": ["no_open_questions"]}}})
+        card = self.card()
+        self.propose(card)
+        self.assertEqual(self.move(card)["column"], "review")
+
+    def test_the_crew_listing_names_the_blocked_card_and_counts_open_proposals(self):
+        card = self.card()
+        self.propose(card)
+        listing = self.app.phases.for_crew(self.tid)
+        self.assertEqual(listing["open_proposals"], 1)
+        self.assertEqual(listing["blocked"][0]["task_id"], card["id"])
+
+    def test_it_applies_to_code_cards_as_well(self):
+        card = self.card(kind="code")
+        self.propose(card)
+        with self.assertRaises(Conflict):
+            self.move(card)
+
+    def test_a_card_can_list_its_own_proposals_and_only_those(self):
+        mine, theirs = self.card(), self.card()
+        a = self.propose(mine)
+        self.propose(theirs)
+        listed = self.app.axis.proposals(self.tid, task_id=mine["id"])
+        self.assertEqual([p["id"] for p in listed], [a["id"]])
+
+    def test_the_route_filters_by_card_and_state(self):
+        from fastapi.testclient import TestClient
+        from api.routes import create_api
+        client = TestClient(create_api(self.app))
+        mine = self.card()
+        proposal = self.propose(mine)
+        self.propose(self.card())
+        got = client.get(f"/crews/{self.tid}/org/proposals",
+                         params={"task_id": mine["id"], "state": "open"}).json()
+        self.assertEqual([p["id"] for p in got["proposals"]], [proposal["id"]])
+        reading = client.get(f"/cards/{mine['id']}/readiness", params={"to": "review"}).json()
+        self.assertEqual(reading["measured"]["open_proposals"], 1)
+        self.assertEqual(reading["unmet"][0]["requirement"], "proposals_settled")

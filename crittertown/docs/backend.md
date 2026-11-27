@@ -920,3 +920,23 @@ one would drift an hour for half the year and is refused. a spent model reports 
 routes: `POST /lanes/{id}/models`, `POST /lanes/{id}/reset`; `POST /crews/{id}/lanes` takes both. schema
 38 adds `models` and `reset` to `model_lanes` and `model` to `model_calls`, added to existing databases
 through `LATER_COLUMNS` so a v37 database upgrades in place.
+
+## accepted and open proposals reach the review gate
+
+a proposal is the lawful way to reach into another department's surface: written down, settled by the
+owner. until now settling one only changed a row, so a card could be accepted while the change it
+depended on was still undecided. `proposals_settled` is a fourth requirement in `work/phases.py`, in the
+default table for every kind at review and done, measured as the count of `org_proposals` rows carrying
+this card's `task_id` still `open`. a card that proposed nothing owes nothing, and a proposal with no card
+blocks no card.
+
+a no does not block. the work can proceed without the change, and blocking on it would make a refusal
+into a hold. it is carried instead: the readiness reading returns `declined_proposals` and
+`accepted_proposals` with each answer, so a reviewer sees what the owner refused and can check the card
+did not route around it. a withdrawn proposal releases the card. a person may still waive the requirement
+with a reason; an agent may not. enforcement stays per crew through `orchestration.phases`, and a crew
+table that omits the requirement drops it.
+
+`GET /crews/{id}/org/proposals` takes `task_id` as well as `state`, so a card can list its own. the
+crew listing from `phases.for_crew` now also counts `open_proposals`. note the stored state for a no is
+`declined`, not `rejected`.

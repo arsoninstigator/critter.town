@@ -519,9 +519,11 @@ def create_api(app: App | None = None) -> FastAPI:
                                 body.get("change", ""), body.get("task_id"))
 
     @api.get("/crews/{team_id}/org/proposals")
-    def list_proposals(team_id: str, state: str | None = Query(None)) -> dict:
+    def list_proposals(team_id: str, state: str | None = Query(None),
+                       task_id: str | None = Query(None)) -> dict:
         app.crews.get_team(team_id)
-        return {"team_id": team_id, "proposals": app.axis.proposals(team_id, state=state)}
+        return {"team_id": team_id,
+                "proposals": app.axis.proposals(team_id, state=state, task_id=task_id)}
 
     @api.post("/org/proposals/{proposal_id}/settle")
     def settle_proposal(proposal_id: str, body: dict) -> dict:

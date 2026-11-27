@@ -38,15 +38,16 @@ GATED_COLUMNS = ("review", "done")
 # owes the acceptance machinery, because it is the only kind where "it ran and it passed" is a
 # thing the records can hold. everything else owes an answer to its own questions.
 DEFAULT_TABLE: dict[str, dict[str, tuple[str, ...]]] = {
-    kind: {"review": ("no_open_questions",), "done": ("no_open_questions",)}
+    kind: {"review": ("no_open_questions", "proposals_settled"),
+           "done": ("no_open_questions", "proposals_settled")}
     for kind in EVIDENCE_KINDS
 }
 DEFAULT_TABLE["code"] = {
-    "review": ("no_open_questions",),
-    "done": ("no_open_questions", "succeeded_run", "sealed_suite"),
+    "review": ("no_open_questions", "proposals_settled"),
+    "done": ("no_open_questions", "proposals_settled", "succeeded_run", "sealed_suite"),
 }
 
-REQUIREMENTS = ("no_open_questions", "succeeded_run", "sealed_suite")
+REQUIREMENTS = ("no_open_questions", "proposals_settled", "succeeded_run", "sealed_suite")
 QUESTION_STATUSES = ("open", "answered", "dropped")
 # who may waive. an agent is not in it, and the list is short on purpose
 WAIVER_KINDS = ("human", "owner")
@@ -99,6 +100,10 @@ def unmet_reason(requirement: str, measured: dict) -> str:
     if requirement == "no_open_questions":
         count = int(measured.get("open_questions") or 0)
         return f"{count} question{'s' if count != 1 else ''} on this card are still open"
+    if requirement == "proposals_settled":
+        count = int(measured.get("open_proposals") or 0)
+        return (f"{count} proposal{'s' if count != 1 else ''} to another department's surface "
+                f"{'are' if count != 1 else 'is'} still waiting on its owner")
     return f"{requirement} is not a requirement this board can measure"
 
 
@@ -109,6 +114,8 @@ def met(requirement: str, measured: dict) -> bool:
         return bool(measured.get("succeeded_run"))
     if requirement == "no_open_questions":
         return int(measured.get("open_questions") or 0) == 0
+    if requirement == "proposals_settled":
+        return int(measured.get("open_proposals") or 0) == 0
     return False
 
 
@@ -268,11 +275,25 @@ class Phases:
         open_questions = self.store.one(
             "select count(*) as n from questions where task_id = ? and status = 'open'",
             (task["id"],))
+        proposals = self.store.query(
+            """select id, surface, change, state, answer from org_proposals
+               where task_id = ? order by created_date""", (task["id"],))
         return {
             "sealed_suite": bool(seal and int(seal["scenarios"] or 0) > 0),
             "sealed_scenarios": int(seal["scenarios"] or 0) if seal else 0,
             "succeeded_run": bool(run and int(run["n"] or 0) > 0),
             "open_questions": int(open_questions["n"] or 0) if open_questions else 0,
+            "open_proposals": sum(1 for row in proposals if row["state"] == "open"),
+            # a no is stored as 'declined'. it does not block, because the work may simply proceed
+            # without the change. it is carried so a reviewer sees what the owner refused and can check it was not routed around
+            "declined_proposals": [
+                {"id": row["id"], "surface": row["surface"], "change": row["change"],
+                 "answer": row["answer"] or ""}
+                for row in proposals if row["state"] == "declined"],
+            "accepted_proposals": [
+                {"id": row["id"], "surface": row["surface"], "change": row["change"],
+                 "answer": row["answer"] or ""}
+                for row in proposals if row["state"] == "accepted"],
         }
 
     def readiness(self, task_id: str, to_column: str | None = None) -> dict:
@@ -332,6 +353,10 @@ class Phases:
         open_questions = self.store.one(
             "select count(*) as n from questions where team_id = ? and status = 'open'",
             (team_id,))
+        open_proposals = self.store.one(
+            "select count(*) as n from org_proposals where team_id = ? and state = 'open'",
+            (team_id,))
         return {"team_id": team_id, "cards": len(rows), "enforced": self.enabled(team_id),
                 "blocked": blocked, "unknown_kind": unknown,
-                "open_questions": int(open_questions["n"] or 0) if open_questions else 0}
+                "open_questions": int(open_questions["n"] or 0) if open_questions else 0,
+                "open_proposals": int(open_proposals["n"] or 0) if open_proposals else 0}

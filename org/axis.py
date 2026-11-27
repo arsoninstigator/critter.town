@@ -251,7 +251,8 @@ class OrgAxis:
                       "where id = ?", (now(), proposal_id))
         return self._proposal(proposal_id)
 
-    def proposals(self, team_id: str, state: str | None = None) -> list[dict]:
+    def proposals(self, team_id: str, state: str | None = None,
+                  task_id: str | None = None) -> list[dict]:
         if state is not None and state not in PROPOSAL_STATES:
             raise ValidationError(f"state must be one of {list(PROPOSAL_STATES)}", state=state)
         sql = "select id from org_proposals where team_id = ?"
@@ -259,6 +260,9 @@ class OrgAxis:
         if state:
             sql += " and state = ?"
             args.append(state)
+        if task_id:
+            sql += " and task_id = ?"
+            args.append(task_id)
         return [self._proposal(row["id"]) for row in self.store.query(
             sql + " order by created_date desc", tuple(args))]
 
