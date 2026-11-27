@@ -419,6 +419,38 @@ def create_api(app: App | None = None) -> FastAPI:
     def card_statements(task_id: str) -> dict:
         return app.ledger.for_card(task_id)
 
+    # an escalation: four lines, a ladder, and the default taken if nobody answers
+    @api.post("/agents/{agent_id}/escalations")
+    def raise_escalation(agent_id: str, body: dict) -> dict:
+        return app.escalations.raise_(
+            agent_id, body.get("category", ""), body.get("what_happened", ""),
+            body.get("already_tried", ""), body.get("decision_needed", ""),
+            body.get("default_action", ""), body.get("default_after_minutes", 0),
+            body.get("task_id"))
+
+    @api.get("/crews/{team_id}/escalations")
+    def list_escalations(team_id: str, state: str | None = Query(None)) -> dict:
+        app.crews.get_team(team_id)
+        return {"team_id": team_id, "escalations": app.escalations.list(team_id, state=state)}
+
+    @api.get("/crews/{team_id}/escalations/reading")
+    def escalation_reading(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.escalations.reading(team_id)
+
+    @api.post("/escalations/{escalation_id}/answer")
+    def answer_escalation(escalation_id: str, body: dict) -> dict:
+        return app.escalations.answer(escalation_id, body.get("by", ""), body.get("answer", ""))
+
+    @api.post("/escalations/{escalation_id}/withdraw")
+    def withdraw_escalation(escalation_id: str, body: dict) -> dict:
+        return app.escalations.withdraw(escalation_id, body.get("agent_id", ""))
+
+    @api.post("/crews/{team_id}/escalations/tick")
+    def tick_escalations(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.escalations.tick(team_id)
+
     # the second axis of the org chart: surface ownership, proposals, blocs, wings and vetoes
     @api.get("/crews/{team_id}/org/axis")
     def org_axis(team_id: str) -> dict:

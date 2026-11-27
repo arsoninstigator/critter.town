@@ -139,6 +139,12 @@ opens a gate with signed single-use tokens; the paper trail is the row, the ques
 travels to the crew channel, and one tap on the link decides it. links expire, are bound
 to one decision, and are refused after use. tables: `gates`, `gate_tokens`.
 
+### escalation
+a decision put to a person in four lines: what happened, what the org already tried, the decision
+needed, and the default it takes if nobody answers. one with no default is refused as a hostage note.
+it climbs a ladder (next holder, coordinator, parent coordinator, a person) and when its deadline
+passes the default is taken and recorded as the org acting, never as a person agreeing.
+
 ### surface
 a named thing one department owns and is the only one allowed to change, registered with the evidence
 its work is checked by. a surface with no evidence is an intention. reaching into another

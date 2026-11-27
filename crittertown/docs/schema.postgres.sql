@@ -857,6 +857,31 @@ create table if not exists readable_checks (
 create index if not exists readable_checks_crew on readable_checks (team_id, created_date);
 create index if not exists readable_checks_run on readable_checks (run_id);
 
+-- v36: an escalation is a decision put to a person, with the four lines and the default it takes
+-- if nobody answers. a person answers it; the org takes the default and says so, as its own outcome.
+create table if not exists escalations (
+    id text primary key,
+    team_id text not null,
+    raised_by text not null references agents(id) on delete cascade,
+    task_id text,
+    category text not null,
+    what_happened text not null,
+    already_tried text not null,
+    decision_needed text not null,
+    default_action text not null,
+    default_after double precision not null,
+    state text not null default 'open',
+    answer text,
+    answered_by text,
+    outcome text,
+    month text not null,
+    reached text not null default '[]',
+    raised_date double precision not null,
+    settled_date double precision
+);
+create index if not exists escalations_crew on escalations (team_id, state);
+create index if not exists escalations_month on escalations (team_id, month);
+
 -- v35: the second axis of an org chart. a surface has exactly one owning department; reaching into
 -- another's is a proposal the owner settles; a bloc lends seats for one objective with an expiry;
 -- a wing holds a veto in a domain and has nothing to grow.

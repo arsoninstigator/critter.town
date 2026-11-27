@@ -832,3 +832,31 @@ routes: `GET /crews/{id}/org/axis`, `POST /crews/{id}/org/surfaces`,
 `POST /org/blocs/{id}/close`, `POST /crews/{id}/org/wings`, `POST /org/wings/{id}/veto`,
 `POST /org/vetoes/{id}/lift`. schema 35 adds `org_surfaces`, `org_proposals`, `org_blocs`,
 `org_bloc_grants`, `org_wings` and `org_vetoes`.
+
+## an escalation: a decision put to a person, with the default it takes if nobody answers
+
+`org/escalations.py`. `departments.escalate` sent one message up one level and stopped, so a decision
+that needed a person had no way to reach one, no clock, and no outcome if nobody answered.
+
+`raise_` needs a category from `irreversible, money, a_person, legality, authority`, all four lines and
+a deadline in minutes. a default that only waits (`wait`, `ask again`, `tbd`, `none`) is refused as a
+hostage note. what does not earn a wake is refused with the reason named: a broken build, a metric that
+has not moved yet, a reversible default, a conflict two slices already settle.
+
+the ladder is data (`LADDER`): next holder at 0 minutes, coordinator at 10, parent coordinator at 30, a
+person at 60. a crew can set its own under `orchestration.escalation.ladder`. `climb` reaches every due
+rung once and is idempotent; a rung with nobody behind it (no holder, no coordinator, or the raiser is
+the coordinator) is recorded as skipped so the gap is visible instead of stalled on. each reach sends the
+four lines as an a2a `blocker`.
+
+`answer` is a person's act: an agent id is refused. `take_defaults` resolves every open escalation past
+its deadline to its stated default with `outcome = org_took_default` and no `answered_by`, so silence can
+never be read as consent later. audit rows hang off the raising agent with the person (or `escalation.tick`)
+named as the actor, the same rule the silence decisions follow. `app.tick()` runs the pass.
+
+`spend` counts the crew's escalations for the month against `orchestration.escalation.monthly_budget`
+(default 5). over budget is reported as a finding about scoping and never refuses a raise.
+
+routes: `POST /agents/{id}/escalations`, `GET /crews/{id}/escalations`, `GET /crews/{id}/escalations/reading`,
+`POST /escalations/{id}/answer`, `POST /escalations/{id}/withdraw`, `POST /crews/{id}/escalations/tick`.
+schema 36 adds `escalations`.

@@ -1039,3 +1039,25 @@ without one is only an obstacle.
 
 delegation, convergence and the four-line escalation shape were already here (work/delegation.py,
 work/convergence.py) and were not rebuilt.
+
+## an escalation with no default is a hostage note
+
+the owner's org notes say what a decision put to a person is: what happened, what the org tried, the
+decision needed, and the default it takes if nobody answers. clawcrew's code has the other half, a
+ladder keyed on time since a lease expired whose last rung is a human card. read side by side, the prose
+has no code and the code has no record, so this is both, and it says which came from where.
+
+the default is the line that matters. without one the person becomes a single point of failure the org
+waits on forever, so it is required, and one that only says wait is refused. when the deadline passes
+the default is taken and recorded as `org_took_default`, a different outcome from `person_decided`,
+because an org that logs its own silence-driven action as a person's approval has forged consent.
+
+an agent cannot answer, because an escalation is a human act by definition and a model approving its own
+escalation is the loop the whole thing exists to break. a rung with nobody behind it is skipped and named
+rather than stalled on, because a ladder that stops at an empty rung is an escalation that never arrives.
+
+over budget is a finding and never a refusal. a crew asking a person too often is mis-scoped, and
+refusing the ask would hide the one thing worth fixing. `suspend_responsibility`, the last rung of the
+clawcrew ladder, is left out on purpose: suspending a department's surfaces reaches into the org axis and
+deserves its own decision. myboard's risk-by-keyword was read and not taken, since critter.town already
+fails closed on what it cannot classify.

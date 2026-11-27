@@ -73,6 +73,7 @@ from work.readable import Readable
 from work.phases import Phases
 from work.posture import Posture
 from org.axis import OrgAxis
+from org.escalations import Escalations
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -152,6 +153,7 @@ class App:
     phases: Phases
     posture: Posture
     axis: OrgAxis
+    escalations: Escalations
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -163,8 +165,13 @@ class App:
         enqueued = self.scheduler.tick()
         handoffs = self.roll_shifts()
         expired = self.gates.expire()
+        # climb what is due and take the default of anything past its deadline
+        escalated = [self.escalations.tick(row["id"]) for row in
+                     self.store.query("select distinct team_id as id from escalations "
+                                      "where state = 'open'")]
         return {"enqueued": enqueued, "handoffs": [h["id"] for h in handoffs],
-                "gates_expired": expired}
+                "gates_expired": expired,
+                "escalations_defaulted": sum(len(e["defaulted"]) for e in escalated)}
 
     def roll_shifts(self) -> list[dict]:
         rolled = []
@@ -304,6 +311,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # the second axis of the org chart: who owns a surface, who is on loan, who may veto
     axis = OrgAxis(store, departments=departments, kanban=kanban, audit=audit)
     runner.axis = axis
+    # a decision put to a person, with the default it takes if nobody answers
+    escalations = Escalations(store, departments=departments, a2a=a2a, audit=audit)
     # an eval reads the crew and the same model the runner uses, so a candidate is
     # measured against the prompt the crew would actually send
     evals = EvalService(store, crews=crews, model=runner.model)
@@ -509,6 +518,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         phases=phases,
         posture=posture,
         axis=axis,
+        escalations=escalations,
         polls=polls,
         browsers=browsers,
         ops=ops,
