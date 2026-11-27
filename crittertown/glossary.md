@@ -144,6 +144,27 @@ what sort of work a card is: code, design, research, security, financial, media,
 accounting, support, doc. it is the axis the board was missing, because every gate and
 every acceptance rule had been written for code and silently applied to a deal.
 
+### statement
+a decision a crew builds on, as a row: the claim, one of the six kinds of drift, the subject it
+is about, where it came from, and whether a person or an agent decided it. an agent may only
+propose one, which makes it `provisional`; a person settles it, which makes it `settled`. two
+active statements on the same declared subject that say different things are a contradiction, and
+that is computed from the subject rather than judged from the prose.
+
+### drift
+the six ways work departs from the record: `logic` (a rule about how the thing behaves),
+`compliance` (an obligation), `tooling` (a vendor or dependency nobody agreed to), `language`
+(the same thing under two names), `scope` (a feature nobody asked for) and `strategy` (work off
+the roadmap). every statement belongs to exactly one, and none of the six is about code in
+particular, which is why a research claim and a pricing rule sit in the same table.
+
+### contradiction
+two active statements on one subject that disagree. both sides are marked `contradicting`, so
+neither half of the crew is missing the warning. settling one side names a winner without
+clearing the loser, retiring the loser clears the winner, and a supersede does both in one act.
+a card that declares a contradicted subject is `blocked` at the ledger check; a contradiction
+found only by shared words is `ask`, because wording is a hint and a subject is a fact.
+
 ### round
 one rejection and the work that answered it. a rejection is a move out of review that is not a
 move to done; the round it opens closes at the next move into review or done, and stays `open`

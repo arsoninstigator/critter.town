@@ -926,3 +926,23 @@ reworked, because the alternative is guessing in the direction that flatters the
 work distribution is measured in turns, because a run records them, and in settled spend, because
 a reservation does. spend with no agent named stays unattributed instead of being shared out: an
 even split is a claim about who did the work that nobody made.
+
+## a decision is a row with a decider, and a contradiction is computed
+
+the drift that costs the most is the one nobody notices: a rule settled in a call, written in a
+doc, contradicted three weeks later by work that never read the doc. the products that sell
+against this put the review at the pull request, which is after the mistake. our gate is at the
+ticket, so the same record can be read before anything is built, and that is the whole reason to
+keep the ledger here rather than in a document.
+
+we kept the six kinds of drift as the statement kinds instead of inventing our own, because they
+are the shapes the failure actually takes and only one of the six is about code. that matters
+because the crews here are not all coding crews: a research claim about what a market does and an
+operations rule about who may refund are the same kind of object as a pricing rule, and a ledger
+that only understood pull requests would have nowhere to put them.
+
+two decisions inside the mechanism are worth naming. an agent may propose and only a person
+settles, since a claim about what the product is, made by the thing being measured, is a proposal
+until somebody answers for it. and a contradiction is computed from a declared subject rather than
+inferred from the prose, because an inference that two sentences disagree is a guess wearing a
+finding's clothes; where no subject is declared the ledger says `ask` instead of `blocked`.

@@ -675,3 +675,35 @@ until)` adds the two lists a person should open first: `silent_rejections` and `
 
 routes: `GET /crews/{id}/distribution?days=7&limit=50` and `GET /cards/{id}/distribution`. the
 board's `created` and `edited` events carry a per-field digest; nothing else changed shape.
+
+## the decisions a crew builds on
+
+`work/ledger.py` keeps decisions as rows a card can be checked against, because the quiet failure
+is a decision that was made once, written down once, and then contradicted by work nobody compared
+it with. the six kinds are the six ways work drifts (`logic`, `compliance`, `tooling`, `language`,
+`scope`, `strategy`), and none of them is specific to code: a research claim, an operations rule
+and a pricing rule all live in `statements`.
+
+a statement carries its text, its kind, a declared `subject` handle, its `source` and
+`source_kind`, and who decided it. an agent's statement is `provisional`; a person's is `settled`,
+and `settle()` refuses an agent by name, because a ledger where the machine's guesses count as
+settled facts is worse than no ledger.
+
+contradictions are computed, not judged. `contradicts()` compares the declared subject and the
+digest of the text: same non-empty subject, both active, different text, and both rows are marked
+`contradicting` with each other's id. a restatement that only differs by punctuation or
+capitalisation is the same claim, so the digest is taken over the normalised text. the way out is
+one act: `propose(..., supersedes=old)` retires the old one and clears both sides, `retire()`
+clears the other side, and `settle()` deliberately does not, since a disagreement that vanishes
+because one side got louder is how a drift gets buried.
+
+`relevant()` matches a card by declared subject (a fact) or by shared words (a hint, two words or
+one of six characters or more, plurals folded). `verdict()` answers `blocked` only for a
+contradiction on a declared subject, `ask` for any other contradiction or a provisional claim, and
+`clear` otherwise. `check()` records every question in `statement_checks`, and `for_dispatch()`
+puts the answer on the run without halting it; `strict=True` refuses instead.
+
+routes: `POST|GET /crews/{id}/statements`, `GET /crews/{id}/statements/contradictions`,
+`POST /crews/{id}/statements/check`, `GET /statements/{id}`, `POST /statements/{id}/settle`,
+`POST /statements/{id}/retire`, `GET /cards/{id}/statements`. a card declares what it is about in
+`payload.subjects`. schema 31 adds `statements` and `statement_checks`.

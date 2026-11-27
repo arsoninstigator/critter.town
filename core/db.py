@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 SCHEMA = """
 create table if not exists meta (
@@ -819,6 +819,45 @@ create table if not exists holdout_gaps (
     created_date real not null
 );
 create index if not exists holdout_gaps_crew on holdout_gaps (team_id, created_date);
+
+-- v31: the decisions a crew builds on, as rows. a statement is a claim with a kind, a subject,
+-- a source and a decider, so work can be checked against it before it is done. the six kinds are
+-- the six ways work drifts from the record, and none of them are about code in particular.
+create table if not exists statements (
+    id text primary key,
+    team_id text not null,
+    text text not null,
+    drift text not null default 'logic',
+    subject text not null default '',
+    certainty text not null default 'provisional',
+    source text not null default '',
+    source_kind text not null default 'note',
+    decided_by text not null default '',
+    decided_by_kind text not null default 'person',
+    contradicts text not null default '[]',
+    supersedes text not null default '',
+    status text not null default 'active',
+    note text not null default '',
+    digest text not null default '',
+    created_date real not null,
+    updated_date real not null
+);
+create index if not exists statements_crew on statements (team_id, status, drift);
+create index if not exists statements_subject on statements (team_id, subject);
+
+-- every check is a row: what was asked, what the ledger said, and who asked. the answer is worth
+-- less than the record that somebody asked before building.
+create table if not exists statement_checks (
+    id text primary key,
+    team_id text not null,
+    task_id text not null default '',
+    subjects text not null default '[]',
+    verdict text not null default 'clear',
+    found text not null default '[]',
+    actor text not null default '',
+    created_date real not null
+);
+create index if not exists statement_checks_crew on statement_checks (team_id, created_date);
 
 -- v23: skills. a skill is know-how with a name and a trigger, loaded in three stages so a
 -- crew with forty of them does not spend forty bodies of context on a card that needs none.

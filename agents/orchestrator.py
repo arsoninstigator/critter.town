@@ -81,6 +81,10 @@ class CrewRunner:
         self.wakes = None
         # set by the composition root: what the run was handed, hashed, so drift is visible
         self.witness = None
+        # set by the composition root: the decisions a crew builds on, read against the card
+        # before the work starts, because a claim that disagrees with another is cheaper to
+        # settle than to build on
+        self.ledger = None
         # set by the composition root: a card whose ancestor is blocked inherits that
         # rather than spending an attempt on a premise that does not exist yet
         self.lineage = None
@@ -210,6 +214,12 @@ class CrewRunner:
         if self.mandate is not None:
             checked = self.mandate.for_dispatch(task, agent)
             mandate_findings = checked.get("findings") or []
+        # what the ledger says about this card: a contradiction on a subject the card declares
+        # is recorded on the run and never halts it by default, since a false match on a word
+        # must not cost a dispatch
+        ledger_check: dict = {}
+        if self.ledger is not None:
+            ledger_check = self.ledger.for_dispatch(task, agent)
         # a card may declare the shape it wants, and the one refusal is a card that
         # asks for orchestration its own signals do not justify: that shape costs seats,
         # tokens and a convergence, and it is what a big-feeling task asks for
@@ -427,6 +437,9 @@ class CrewRunner:
             "result": result,
             "error": error,
             "mandate_findings": mandate_findings,
+            "ledger": {"verdict": ledger_check.get("verdict", "clear"),
+                       "contested": ledger_check.get("contested") or [],
+                       "found": [row["id"] for row in ledger_check.get("found") or []]},
         }
 
     def dispatch_ready(self, team_id: str, limit: int = 10, max_turns: int = 6) -> list[dict]:

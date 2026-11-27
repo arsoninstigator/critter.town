@@ -68,6 +68,7 @@ from work.heartbeat import HeartbeatService
 from work.skills import SkillService
 from work.templates import TemplateService
 from work.holdout import HoldoutService
+from work.ledger import Ledger
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -142,6 +143,7 @@ class App:
     templates: TemplateService
     # the acceptance criteria a crew may not read, and the ledger of who tried
     holdout: HoldoutService
+    ledger: Ledger
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -403,6 +405,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # the criteria a crew is measured on, kept where the crew cannot read them
     holdout = HoldoutService(store, crews=crews, knowledge=knowledge, lessons=lessons,
                              intent=intent, skills=skills, context=context)
+    # the decisions a crew builds on, so a card can be checked against them before it is done.
+    # a contradiction is computed from declared subjects, never judged from the prose
+    ledger = Ledger(store, crews=crews, kanban=kanban, audit=audit)
+    runner.ledger = ledger
     runner.context = context
 
     kanban.events_hook = emit
@@ -476,6 +482,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         skills=skills,
         templates=templates,
         holdout=holdout,
+        ledger=ledger,
         polls=polls,
         browsers=browsers,
         ops=ops,

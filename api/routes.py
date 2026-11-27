@@ -363,6 +363,62 @@ def create_api(app: App | None = None) -> FastAPI:
     def holdout_acceptance(team_id: str) -> dict:
         return app.holdout.acceptance(team_id)
 
+    # the decisions a crew builds on. a statement is a claim with a kind, a subject and a
+    # decider, and two active claims on one subject that disagree are a contradiction, computed
+    # from the declared subject rather than judged from the prose
+    @api.post("/crews/{team_id}/statements")
+    def write_statement(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload or {})
+        return app.ledger.propose(
+            team_id, str(data.get("text") or ""), drift=str(data.get("drift") or "logic"),
+            subject=str(data.get("subject") or ""), source=str(data.get("source") or ""),
+            source_kind=str(data.get("source_kind") or "note"),
+            actor=str(data.get("actor") or "owner"),
+            supersedes=str(data.get("supersedes") or ""))
+
+    @api.get("/crews/{team_id}/statements")
+    def list_statements(team_id: str, drift: str = Query(""), status: str = Query("active"),
+                        limit: int = Query(100)) -> dict:
+        app.crews.get_team(team_id)
+        return {"statements": app.ledger.statements(team_id, drift=drift, status=status,
+                                                    limit=limit)}
+
+    @api.get("/crews/{team_id}/statements/contradictions")
+    def list_contradictions(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return {"contradictions": app.ledger.contradictions(team_id)}
+
+    @api.post("/crews/{team_id}/statements/check")
+    def check_statements(team_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        subjects = data.get("subjects") or []
+        if isinstance(subjects, str):
+            subjects = [subjects]
+        return app.ledger.check(team_id, subjects=list(subjects),
+                                text=str(data.get("text") or ""),
+                                task_id=str(data.get("task_id") or ""),
+                                actor=str(data.get("actor") or "owner"))
+
+    @api.get("/statements/{statement_id}")
+    def read_statement(statement_id: str) -> dict:
+        return app.ledger.get(statement_id)
+
+    @api.post("/statements/{statement_id}/settle")
+    def settle_statement(statement_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.ledger.settle(statement_id, actor=str(data.get("actor") or "owner"),
+                                 note=str(data.get("note") or ""))
+
+    @api.post("/statements/{statement_id}/retire")
+    def retire_statement(statement_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        return app.ledger.retire(statement_id, reason=str(data.get("reason") or ""),
+                                 actor=str(data.get("actor") or "owner"))
+
+    @api.get("/cards/{task_id}/statements")
+    def card_statements(task_id: str) -> dict:
+        return app.ledger.for_card(task_id)
+
     # ---- the crew's trail, in one order --------------------------------
     # per-agent chains say what one agent did; the crew chain says what happened, in what
     # order, across agents. jsonl because an audit you cannot grep is one you must trust.
