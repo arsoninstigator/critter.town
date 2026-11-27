@@ -736,3 +736,33 @@ leaned on auxiliary supply in the window.
 
 routes: `GET /runs/{id}/readable?record=`, `GET /cards/{id}/readable`,
 `GET /crews/{id}/readable?days=`. schema 32 adds `readable_checks`.
+
+## what a card owes, and what it still has open
+
+`work/phases.py` types the board by kind, using the same vocabulary as `work/evidence.py`.
+`DEFAULT_TABLE` says what each kind owes per gated column: a `code` card owes `no_open_questions` at
+`review` and `no_open_questions`, `succeeded_run`, `sealed_suite` at `done`, and every other kind
+owes the question list at both. `kind_of(task)` reads the `kind` column and falls back to the
+payload, and an unknown kind is a `ValidationError` rather than a downgrade.
+
+the requirements are measured from records that already exist, never asserted: `sealed_suite` is a
+row in `holdout_seals` for the crew with at least one scenario, `succeeded_run` is a `runs` row on
+the card with status `succeeded`, and `no_open_questions` is a count over `questions`. `readiness`
+returns the requirements, the measurement, the unmet ones with a sentence each, whether the crew
+enforces them, and any waiver for that column.
+
+enforcement is per crew: `teams.orchestration["phases"]` is either `true` or a partial table of
+`kind -> column -> requirements`, merged over the default so a crew that tightened code did not
+loosen research. `KanbanService.move` calls `phases.check_move` once the transition is legal, so
+both the short path and `approve` are gated, and a refusal is a `Conflict` whose details name the
+requirement and the column. a crew that never opted in is not gated, while `readiness` answers for
+any card. `waive` records a `phase_waivers` row and refuses a non-person by name.
+
+questions are their own records: `ask`, `answer` and `drop` (dropping needs a reason and keeps it),
+`questions(task_id, status=)` and `crew_questions(team_id, status=)`, which joins the card title so a
+crew page does not have to make n calls. `for_crew` lists the cards whose kind owes something they do
+not have.
+
+routes: `POST|GET /cards/{id}/questions`, `POST /questions/{id}/answer`, `POST /questions/{id}/drop`,
+`GET /crews/{id}/questions`, `GET /cards/{id}/readiness?to=`, `POST|GET /cards/{id}/phase-waivers`.
+schema 33 adds `questions` and `phase_waivers`.

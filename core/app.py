@@ -70,6 +70,7 @@ from work.templates import TemplateService
 from work.holdout import HoldoutService
 from work.ledger import Ledger
 from work.readable import Readable
+from work.phases import Phases
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -146,6 +147,7 @@ class App:
     holdout: HoldoutService
     ledger: Ledger
     readable: Readable
+    phases: Phases
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -287,6 +289,10 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # a beat a card did not walk is written down, or the card does not leave review
     waivers = Waiver(store)
     kanban.waivers = waivers
+    # a story owes its acceptance suite and a closed question list before it is reviewable;
+    # an operational task owes only the second
+    phases = Phases(store, kanban=kanban, audit=audit)
+    kanban.phases = phases
     # an eval reads the crew and the same model the runner uses, so a candidate is
     # measured against the prompt the crew would actually send
     evals = EvalService(store, crews=crews, model=runner.model)
@@ -489,6 +495,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         holdout=holdout,
         ledger=ledger,
         readable=readable,
+        phases=phases,
         polls=polls,
         browsers=browsers,
         ops=ops,

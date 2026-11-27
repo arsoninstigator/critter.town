@@ -967,3 +967,36 @@ yields no signal, an empty allowlist means no hosts provisioned rather than all 
 forbidden tool is a decision about a tool rather than a supply of one. those three refusals are the
 same rule in three places: silence is not permission, and a checker that assumes the friendly
 reading is worse than no checker.
+
+## the board asks by kind, and it measures rather than asks for a tick
+
+a board where a code change, a research question and a support reply walk the same path teaches a
+crew that they are the same object. they are not. a code card does not close until a run of it has
+succeeded against acceptance criteria sealed before the work began, and nothing is reviewable while
+somebody's question about it is still open. so the requirements are typed by the kind of card and
+measured from records the system already holds: a seal row, a succeeded run, a count of open
+questions. the kinds are the same ones the evidence gate already uses, because two vocabularies for
+the sort of work a card is would be two chances to disagree.
+
+that choice has one consequence worth stating. a requirement that can be measured cannot be
+satisfied by ticking a box, which is what makes it worth enforcing, and it also means a crew cannot
+pass a phase by asserting it did. the cost is that a crew whose evidence lives somewhere else has to
+put it where the records are, and that is a cost we are willing to pay, because the alternative is a
+gate that grades paperwork.
+
+an agent may not waive a phase. a person may, with a reason, and the reason stays on the card. this
+is the same rule as settling a statement: a gate the machine can lift is not a gate, it is a
+suggestion with a database table.
+
+## a gate is opt-in, and the reading is not
+
+enforcing phase checks by default would have changed what every existing crew's board accepts
+overnight, and a gate that appears without being asked for reads as a bug rather than a standard. so
+a crew states its policy in `orchestration["phases"]`, either `true` or a partial table merged over
+the default, and only then does the board start refusing moves. `readiness` answers regardless, which
+keeps the mechanism useful as a report for crews that have not adopted it yet.
+
+the partial merge is the other half of the decision: a crew that tightened `code` should not silently
+loosen `research`, so a stated table replaces the kinds it names and leaves the rest of the default
+standing. a policy language where every edit is a full rewrite is a policy language people stop
+editing.

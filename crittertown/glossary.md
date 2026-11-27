@@ -144,6 +144,31 @@ what sort of work a card is: code, design, research, security, financial, media,
 accounting, support, doc. it is the axis the board was missing, because every gate and
 every acceptance rule had been written for code and silently applied to a deal.
 
+### kind
+the sort of work a card is, from the same vocabulary its evidence is drawn from (code, design,
+research, security, financial, media, ops, accounting, support, doc), and the thing that decides
+what the card owes before it may move. a code card owes a closed question list before review, and a
+succeeded run against a sealed acceptance suite before it closes. every other kind owes only the
+questions, because code is the only kind where "it ran and it passed" is something the records can
+hold. an unknown kind is refused rather than handed the lightest path.
+
+### open question
+a question about a card, recorded with its asker and an owner, in one of three states: open,
+answered or dropped with a reason. while it is open the card it belongs to is not reviewable, at
+any kind. it is a record rather than a comment because a question held in somebody's head is a
+gate that depends on who is reading.
+
+### phase waiver
+a person's decision that a card may enter a column it does not yet owe, with a reason and a name
+attached. an agent may not waive a gate, for the same reason an agent may not settle a statement:
+a gate the machine can lift is not a gate.
+
+### phase check
+the board asking, by kind, what a card owes before it moves. enforcement is per crew: a crew that
+turns phase checks on gets refusals at `review` and `done`, and a crew that has not is left alone,
+because a gate nobody switched on is a surprise rather than a standard. the reading is not opt-in,
+so `readiness` answers for any card at any time.
+
 ### readable space
 everything a run did that can be traced back, step by step, to the inputs somebody provisioned: the
 brief, the allowed hosts, the tool list, the sandbox. it can only be established afterwards,

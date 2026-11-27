@@ -419,6 +419,44 @@ def create_api(app: App | None = None) -> FastAPI:
     def card_statements(task_id: str) -> dict:
         return app.ledger.for_card(task_id)
 
+    # a card of a given kind owes something before it may move, and an open question is a
+    # record with an asker rather than a comment somebody has to remember
+    @api.post("/cards/{task_id}/questions")
+    def ask_question(task_id: str, body: dict) -> dict:
+        return app.phases.ask(task_id, body.get("text", ""), body.get("asked_by", ""))
+
+    @api.get("/cards/{task_id}/questions")
+    def card_questions(task_id: str, status: str | None = Query(None)) -> dict:
+        rows = app.phases.questions(task_id, status=status)
+        return {"task_id": task_id, "count": len(rows), "questions": rows}
+
+    @api.post("/questions/{question_id}/answer")
+    def answer_question(question_id: str, body: dict) -> dict:
+        return app.phases.answer(question_id, body.get("text", ""), body.get("by", ""))
+
+    @api.post("/questions/{question_id}/drop")
+    def drop_question(question_id: str, body: dict) -> dict:
+        return app.phases.drop(question_id, body.get("why", ""), body.get("by", ""))
+
+    @api.get("/crews/{team_id}/questions")
+    def crew_questions(team_id: str, status: str = Query("open")) -> dict:
+        app.crews.get_team(team_id)
+        return app.phases.crew_questions(team_id, status=status)
+
+    @api.get("/cards/{task_id}/readiness")
+    def card_readiness(task_id: str, to: str | None = Query(None)) -> dict:
+        return app.phases.readiness(task_id, to_column=to)
+
+    @api.post("/cards/{task_id}/phase-waivers")
+    def waive_phase(task_id: str, body: dict) -> dict:
+        return app.phases.waive(task_id, body.get("column", ""), body.get("reason", ""),
+                                by=body.get("by", "owner"), by_kind=body.get("by_kind", "human"))
+
+    @api.get("/cards/{task_id}/phase-waivers")
+    def card_waivers(task_id: str) -> dict:
+        rows = app.phases.waivers(task_id)
+        return {"task_id": task_id, "count": len(rows), "waivers": rows}
+
     # what a run reached for, against what it was provisioned with. an advantage that came
     # through a channel nobody provisioned is real and is not reproducible
     @api.get("/crews/{team_id}/readable")

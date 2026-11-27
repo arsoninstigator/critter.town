@@ -82,6 +82,8 @@ class KanbanService:
         self.convergence = None
         # set by the composition root: a reviewed card needs a reviewer or a written waiver
         self.waivers = None
+        # set by the composition root: what a card of a given kind owes before it may move
+        self.phases = None
 
     # ---- tasks ---------------------------------------------------------
     def create_task(
@@ -367,6 +369,9 @@ class KanbanService:
             )
         self._check_actor(task, actor, column)
         self._check_review(task, actor, column)
+        # the kind of card decides what it owes. measured from records, never from a tick
+        if self.phases is not None:
+            self.phases.check_move(task, column)
         patch = patch_for(column, now())
         if column == "done":
             # the short way to done is still the gate: evidence is checked here too, so

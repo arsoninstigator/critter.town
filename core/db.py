@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 SCHEMA = """
 create table if not exists meta (
@@ -876,6 +876,36 @@ create table if not exists readable_checks (
 );
 create index if not exists readable_checks_crew on readable_checks (team_id, created_date);
 create index if not exists readable_checks_run on readable_checks (run_id);
+
+-- v33: what a card of a given kind owes before it may move, and the questions it still has open.
+-- an open question is a record rather than a comment: it has an asker, it has an answer or a
+-- reason it was dropped, and while it is open the card it belongs to is not reviewable.
+create table if not exists questions (
+    id text primary key,
+    team_id text not null,
+    task_id text not null default '',
+    text text not null,
+    asked_by text not null default '',
+    status text not null default 'open',
+    answer text not null default '',
+    answered_by text not null default '',
+    created_date real not null,
+    closed_date real
+);
+create index if not exists questions_card on questions (task_id, status);
+create index if not exists questions_crew on questions (team_id, status);
+
+-- a waived phase is a person's decision, with a reason, and an agent may not make one
+create table if not exists phase_waivers (
+    id text primary key,
+    team_id text not null,
+    task_id text not null default '',
+    column_name text not null,
+    reason text not null,
+    waived_by text not null default 'owner',
+    created_date real not null
+);
+create index if not exists phase_waivers_card on phase_waivers (task_id, column_name);
 
 -- v23: skills. a skill is know-how with a name and a trigger, loaded in three stages so a
 -- crew with forty of them does not spend forty bodies of context on a card that needs none.
