@@ -215,7 +215,18 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
-### the skills the tool ships
+### reading a card somebody else wrote
+
+an a2a agent card is a claim about a remote agent, written by that agent's operator. so
+`from_a2a` reads it as testimony: the description becomes instructions with a header
+saying whose account it is, the skills are reported as `a2a.skill:<id>` rather than adopted
+(a skill name from a card is the remote party naming our capabilities), each skill's
+description is kept as knowledge attributed to "the remote agent claims", and a card
+carrying a credential is refused with `card_carries_a_secret`, because a card is a public
+document. a card over plain http, or with no description at all, comes with a warning
+rather than a silent pass.
+
+## the skills the tool ships
 
 `GET /skills/shipped` lists the SKILL.md the tool carries about itself, and
 `POST /crews/{id}/skills/shipped` with `{"name": "using-the-board"}` installs one into a

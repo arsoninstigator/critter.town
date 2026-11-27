@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from base import AppCase  # noqa: E402
 from agents import simpleyaml  # noqa: E402
-from agents.agent_imports import adopt, from_crewai, from_openai  # noqa: E402
+from agents.agent_imports import adopt, from_a2a, from_crewai, from_openai  # noqa: E402
 from core.errors import ValidationError  # noqa: E402
 
 CREW_YAML = """
@@ -187,6 +187,76 @@ class OpenaiTests(unittest.TestCase):
         manifest = from_openai(ASSISTANT)
         self.assertIn("temperature", manifest.unmapped)
         self.assertIn("response_format", manifest.unmapped)
+
+
+REAL_CARD = {
+    "protocolVersion": "0.2.5",
+    "name": "Invoice Reconciler",
+    "description": ("Reconciles supplier invoices against purchase orders and flags "
+                    "mismatches. Runs nightly on the operator's own infrastructure."),
+    "url": "https://agents.example.com/a2a/v1",
+    "preferredTransport": "JSONRPC",
+    "version": "1.4.0",
+    "provider": {"organization": "Example Ltd", "url": "https://example.com"},
+    "capabilities": {"streaming": True, "pushNotifications": False},
+    "defaultInputModes": ["text/plain"],
+    "skills": [
+        {"id": "reconcile", "name": "Reconcile invoices",
+         "description": "Matches invoices to POs by amount and date.",
+         "tags": ["finance"], "examples": ["reconcile November"]},
+        {"id": "flag", "name": "Flag mismatches",
+         "description": "Lists invoices that cannot be matched."},
+    ],
+    "securitySchemes": {"apiKey": {"type": "apiKey", "in": "header"}},
+    "security": [{"apiKey": []}],
+}
+
+
+class A2aCardTests(unittest.TestCase):
+    def test_a_card_is_read_as_the_remote_partys_account(self):
+        manifest = from_a2a(REAL_CARD)
+        self.assertEqual(manifest.name, "Invoice Reconciler")
+        self.assertEqual(
+            manifest.role,
+            "Reconciles supplier invoices against purchase orders and flags mismatches")
+        self.assertIn("not an instruction you were given", manifest.instructions)
+        self.assertIn("Runs nightly", manifest.instructions)
+
+    def test_the_remote_skills_never_become_our_skills(self):
+        manifest = from_a2a(REAL_CARD)
+        self.assertEqual(manifest.skills, [])
+        self.assertIn("a2a.skill:reconcile", manifest.unmapped)
+        self.assertIn("a2a.skill:flag", manifest.unmapped)
+
+    def test_the_remote_skills_are_kept_as_attributed_knowledge(self):
+        manifest = from_a2a(REAL_CARD)
+        titles = [entry["title"] for entry in manifest.knowledge]
+        self.assertIn("Invoice Reconciler: Reconcile invoices", titles)
+        body = manifest.knowledge[0]["text"]
+        self.assertIn("the remote agent claims", body)
+        self.assertIn("source: https://agents.example.com/a2a/v1", body)
+
+    def test_a_card_carrying_a_credential_is_refused(self):
+        card = dict(REAL_CARD, securitySchemes={
+            "apiKey": {"type": "apiKey", "value": "sk-live-abcdefghijklmnop"}})
+        with self.assertRaises(ValidationError) as caught:
+            from_a2a(card)
+        self.assertEqual(caught.exception.details.get("reason"), "card_carries_a_secret")
+
+    def test_a_plain_http_endpoint_is_a_warning(self):
+        manifest = from_a2a(dict(REAL_CARD, url="http://agents.example.com/a2a"))
+        self.assertTrue(any("https" in warning for warning in manifest.warnings))
+
+    def test_the_transport_and_security_are_reported_rather_than_copied(self):
+        manifest = from_a2a(REAL_CARD)
+        for key in ("card.url", "card.securitySchemes", "card.security",
+                    "card.preferredTransport", "card.provider"):
+            self.assertIn(key, manifest.unmapped)
+
+    def test_a_card_with_no_description_says_the_prompt_is_empty(self):
+        manifest = from_a2a({"name": "bare", "url": "https://x.example/a2a"})
+        self.assertEqual(manifest.instructions, "")
+        self.assertTrue(any("no system prompt" in warning for warning in manifest.warnings))
 
 
 class AdoptionTests(AppCase):

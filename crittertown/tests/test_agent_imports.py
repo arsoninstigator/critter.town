@@ -124,8 +124,12 @@ class FormatTests(AppCase):
     def test_an_a2a_card_imports_without_pretending_it_has_a_prompt(self):
         manifest = import_agent(A2A_CARD)
         self.assertEqual(manifest.name, "invoice clerk")
-        self.assertEqual(manifest.skills, ["read-invoice"])
-        self.assertTrue(any("agent card" in warning for warning in manifest.warnings))
+        # a card's skills are the remote agent's capabilities, so they are reported: a
+        # label on our profile would read as a permission we granted ourselves
+        self.assertEqual(manifest.skills, [])
+        self.assertIn("a2a.skill:read-invoice", manifest.unmapped)
+        self.assertTrue(any("reported, not imported" in warning
+                            for warning in manifest.warnings))
         self.assertIn("card.url", manifest.unmapped)
         self.assertTrue(manifest.knowledge)
 

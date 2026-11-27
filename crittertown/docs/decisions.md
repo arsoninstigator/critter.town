@@ -717,3 +717,20 @@ gate), and a test reads the columns from the board rather than trusting the pros
 carries no paths or route strings, because a skill that names `/tasks/{id}/claim` is a
 skill that goes stale the first time a route moves, and the agent then believes a 404 is a
 refusal.
+
+## a card is testimony, not instruction
+
+the a2a reader was the last import path never run against a real card, and it was doing
+the opposite of the openclaw and crewai readers in one place and the same wrong thing in
+another. it copied every skill id onto our agent's profile, so a stranger's card decided
+which capabilities our agent appeared to have. and it stuffed the card's blurb into `role`,
+truncated at two hundred characters, while `instructions` stayed empty, so the one
+paragraph a card actually gives you was thrown away and the sentence kept was cut mid-word.
+
+both are fixed by deciding what a card is. it is testimony: somebody describing an agent
+they run. the description becomes the instructions with a header saying it is their
+account and not an order, the role is its first sentence, the skills are reported as
+`a2a.skill:<id>` and never adopted, and each skill's description is kept as knowledge that
+begins "the remote agent claims", with the card's url as its source. the security and
+transport keys stay unmapped, and a card carrying a credential is refused outright,
+because a card is served in public and a key in one is a key that has already leaked.
