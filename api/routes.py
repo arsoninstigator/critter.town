@@ -331,6 +331,25 @@ def create_api(app: App | None = None) -> FastAPI:
     def holdout_access(team_id: str, limit: int = Query(50)) -> dict:
         return {"access": app.holdout.access(team_id, limit=limit)}
 
+    # ---- the crew's trail, in one order --------------------------------
+    # per-agent chains say what one agent did; the crew chain says what happened, in what
+    # order, across agents. jsonl because an audit you cannot grep is one you must trust.
+    @api.get("/crews/{team_id}/audit.jsonl")
+    def export_crew_audit_jsonl(team_id: str, limit: int = Query(100000, ge=1)) -> Response:
+        bundle = app.audit.export_team(team_id, limit=limit)
+        return Response(content=app.audit.to_jsonl(bundle["entries"]),
+                        media_type="application/x-ndjson")
+
+    @api.post("/crews/{team_id}/audit/verify")
+    def verify_crew_audit(team_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        if data.get("jsonl"):
+            # checked as it arrived: no database, no trust in whoever sent it
+            return app.audit.verify_bundle(app.audit.from_jsonl(str(data["jsonl"])))
+        return {"crew": app.audit.verify_crew(team_id),
+                "agents": {a["id"]: app.audit.verify(a["id"])
+                           for a in app.crews.list_agents(team_id)}}
+
     # ---- crew templates -------------------------------------------------
     # a crew as a document: out for handing over, in for standing one up, and the skeleton
     # for the question "what is the least a crew can be".
@@ -805,8 +824,10 @@ def create_api(app: App | None = None) -> FastAPI:
         return summary
 
     @api.get("/crews/{team_id}/audit")
-    def crew_audit(team_id: str, limit: int = Query(200, ge=1, le=500)) -> dict:
-        return {"entries": app.audit.crew_history(team_id, limit=limit)}
+    def crew_audit(team_id: str, limit: int = Query(200, ge=1, le=100000)) -> dict:
+        # the same path now answers the whole bundle: the entries in crew order, and the
+        # verdict for both questions. a caller that only wanted entries still finds them.
+        return app.audit.export_team(team_id, limit=limit)
 
     @api.get("/agents/by-key/{agent_key}")
     def agent_by_key(agent_key: str) -> dict:

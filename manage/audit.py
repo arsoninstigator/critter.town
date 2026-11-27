@@ -67,6 +67,14 @@ def _canonical(payload: Any) -> str:
     return attest.canonical(payload)
 
 
+def _crew_hash(team_prev: str, team_seq: int, agent_id: str, digest: str) -> str:
+    """one chain across the whole crew. the per-agent digest goes in, so a crew hash
+    covers the row's content and its place in its agent's own chain as well."""
+    import hashlib
+    body = "\u241f".join([team_prev, str(team_seq), agent_id, digest])
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
 def _digest(
     seq: int,
     action: str,
@@ -138,16 +146,31 @@ class AuditService:
                         reason=verdict["why"])
                 signer, pubkey, signature = (verdict["agentid"], verdict["pubkey"],
                                             attestation)
+            head = c.execute(
+                "select seq, hash from crew_audit_heads where team_id = ?", (team_id,)
+            ).fetchone()
+            team_seq = int(head["seq"]) + 1 if head else 1
+            team_prev = head["hash"] if head else ""
+            team_hash = _crew_hash(team_prev, team_seq, agent_id, digest)
             c.execute(
                 """insert into agent_audit
                    (id, team_id, agent_id, seq, action, actor_kind, actor_id, target_kind,
-                    target_id, payload, prev_hash, hash, signer, pubkey, sig, created_date)
-                   values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    target_id, payload, prev_hash, hash, signer, pubkey, sig, team_seq,
+                    team_prev, team_hash, created_date)
+                   values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     entry_id, team_id, agent_id, seq, action, actor_kind,
                     actor_id or agent_id, target_kind, target_id, payload_json,
-                    prev_hash, digest, signer, pubkey, signature, now(),
+                    prev_hash, digest, signer, pubkey, signature, team_seq,
+                    team_prev, team_hash, now(),
                 ),
+            )
+            c.execute(
+                """insert into crew_audit_heads (team_id, seq, hash, updated_date)
+                   values (?,?,?,?)
+                   on conflict(team_id) do update set seq = excluded.seq,
+                       hash = excluded.hash, updated_date = excluded.updated_date""",
+                (team_id, team_seq, team_hash, now()),
             )
         entry = self.get(entry_id)
         if self.on_record:
@@ -207,6 +230,9 @@ class AuditService:
             # payload it could reconstruct, and the row's hash chains it into place
             "attests": ("payload" if self.keys.custody_of(row["agent_id"]) == "external"
                         else "row"),
+            "team_seq": (row["team_seq"] if "team_seq" in row.keys() else 0),
+            "team_prev": (row["team_prev"] if "team_prev" in row.keys() else ""),
+            "team_hash": (row["team_hash"] if "team_hash" in row.keys() else ""),
             "created_date": row["created_date"],
         }
 
@@ -277,6 +303,40 @@ class AuditService:
             "agent_id": agent_id,
         }
 
+    # ---- the crew's own order ------------------------------------------
+    def verify_crew(self, team_id: str) -> dict:
+        """the interleaving, checked. per-agent chains cannot see a row moved from one
+        agent's trail into another's; this walks the crew sequence instead."""
+        rows = self.store.query(
+            """select agent_id, team_seq, team_prev, team_hash, hash from agent_audit
+               where team_id = ? and team_seq > 0 order by team_seq""",
+            (team_id,),
+        )
+        legacy = self.store.one(
+            "select count(*) as n from agent_audit where team_id = ? and team_seq = 0",
+            (team_id,),
+        )
+        expected_prev = ""
+        expected_seq = 1
+        for row in rows:
+            if int(row["team_seq"]) != expected_seq:
+                return {"ok": False, "entries": len(rows), "broken_at_team_seq": expected_seq,
+                        "reason": "crew_sequence_gap", "pre_crew_rows": legacy["n"]}
+            recomputed = _crew_hash(row["team_prev"], int(row["team_seq"]),
+                                    row["agent_id"], row["hash"])
+            if row["team_prev"] != expected_prev or recomputed != row["team_hash"]:
+                return {"ok": False, "entries": len(rows),
+                        "broken_at_team_seq": int(row["team_seq"]),
+                        "reason": "crew_hash_mismatch", "pre_crew_rows": legacy["n"]}
+            expected_prev = row["team_hash"]
+            expected_seq += 1
+        head = self.store.one(
+            "select seq, hash from crew_audit_heads where team_id = ?", (team_id,))
+        agrees = bool(head) and int(head["seq"]) == expected_seq - 1 and head["hash"] == expected_prev
+        return {"ok": True, "entries": len(rows), "broken_at_team_seq": None,
+                "reason": "", "head_agrees": agrees, "head": expected_prev,
+                "pre_crew_rows": legacy["n"]}
+
     # ---- attestation: the part you hand to someone else ----------------
     def export(self, agent_id: str) -> dict:
         """a self-contained bundle. verify it with `attest.verify_entries()` and no
@@ -298,6 +358,92 @@ class AuditService:
             "entries": entries,
             "verification": attest.verify_entries(entries),
         }
+
+    def export_team(self, team_id: str, limit: int = 100000) -> dict:
+        """the whole crew's trail in one order, ready to be checked somewhere else.
+
+        jsonl as well as json because an audit you cannot grep is an audit you have to
+        trust: one object per line survives `grep`, `diff`, `wc -l` and a spreadsheet,
+        and re-imports without a parser of ours.
+        """
+        team = self.store.one("select id, name, slug from teams where id = ?", (team_id,))
+        if not team:
+            raise NotFound(f"crew {team_id} not found")
+        rows = self.store.query(
+            """select * from agent_audit where team_id = ?
+               order by case when team_seq > 0 then team_seq else 1000000000 + rowid end
+               limit ?""",
+            (team_id, limit),
+        )
+        entries = [self._entry(row) for row in rows]
+        agents = sorted({entry["agent_id"] for entry in entries})
+        return {
+            "kind": "crittertown.crew-attestation",
+            "version": 1,
+            "team_id": team_id,
+            "name": team["name"],
+            "slug": team["slug"],
+            "entries": entries,
+            "verification": {
+                "crew": self.verify_crew(team_id),
+                "agents": {agent_id: self.verify(agent_id) for agent_id in agents},
+                "bundle": self.verify_bundle(entries),
+            },
+        }
+
+    def to_jsonl(self, entries: list[dict]) -> str:
+        """one entry per line. no wrapper, so a line is a row a person can read."""
+        import json
+        return "\n".join(json.dumps(entry, sort_keys=True) for entry in entries) + "\n"
+
+    def from_jsonl(self, text: str) -> list[dict]:
+        import json
+        entries = []
+        for number, line in enumerate((text or "").splitlines(), start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValidationError(f"line {number} is not json: {exc}",
+                                      reason="bad_jsonl") from exc
+        return entries
+
+    def verify_bundle(self, entries: list[dict]) -> dict:
+        """check a trail with nothing but the trail.
+
+        two questions, asked separately because they fail differently: did the crew's
+        order hold, and does each agent's own chain and signature hold. a bundle that
+        answers both needs no database, no running process and no trust in the sender.
+        """
+        ordered = [e for e in entries if int(e.get("team_seq") or 0) > 0]
+        ordered.sort(key=lambda e: int(e["team_seq"]))
+        expected_prev = ""
+        expected_seq = 1
+        for entry in ordered:
+            if int(entry["team_seq"]) != expected_seq:
+                return {"ok": False, "crew_ok": False, "agents": {},
+                        "broken_at_team_seq": expected_seq, "reason": "crew_sequence_gap"}
+            recomputed = _crew_hash(entry.get("team_prev", ""), int(entry["team_seq"]),
+                                    entry.get("agent_id", ""), entry.get("hash", ""))
+            if entry.get("team_prev", "") != expected_prev or recomputed != entry.get("team_hash"):
+                return {"ok": False, "crew_ok": False, "agents": {},
+                        "broken_at_team_seq": int(entry["team_seq"]),
+                        "reason": "crew_hash_mismatch"}
+            expected_prev = entry["team_hash"]
+            expected_seq += 1
+        agents: dict[str, dict] = {}
+        for agent_id in sorted({e.get("agent_id", "") for e in entries}):
+            own = sorted([e for e in entries if e.get("agent_id") == agent_id],
+                         key=lambda e: int(e.get("seq") or 0))
+            verdict = attest.verify_entries(own)
+            agents[agent_id] = verdict
+        ok = all(v.get("ok") for v in agents.values())
+        return {"ok": ok, "crew_ok": True, "agents": agents,
+                "broken_at_team_seq": None,
+                "reason": "" if ok else "agent_chain_broken",
+                "entries": len(entries), "ordered": len(ordered)}
 
     def workflow_attestation(self, workflow_id: str) -> dict:
         """every signed row about one workflow, in order.

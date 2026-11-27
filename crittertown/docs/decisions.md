@@ -651,3 +651,27 @@ teaches nobody anything.
 the part worth keeping is the one that was already right: memory arrives as knowledge. text
 we did not write is data an agent may read and weigh, never instruction it must follow, and
 an imported `MEMORY.md` in a prompt would be somebody else's orders wearing this crew's name.
+
+## the interleaving is part of the evidence
+
+the trail had one chain per agent, and that answers a narrower question than it looked
+like it did. it proves an agent's own rows were not edited relative to each other. it
+cannot prove that agent a's row came before agent b's, because a row lifted out of one
+chain and dropped into the other leaves both chains internally consistent. when the only
+witnesses are agents, the order between them is exactly the thing a person will want to
+argue about.
+
+so there is a second chain: one head per crew, advanced in the same transaction as the row
+it covers, over the per-agent digest plus the agent id and the crew position. the two
+chains fail differently on purpose. edit a row's content and the agent chain names the
+sequence; move a row between agents or delete one and the crew chain names the position.
+a test for each, since a check that only fails one way is a check nobody trusts.
+
+rows written before this read back as crew position zero and are counted as pre-crew. a
+migration that rewrote old rows to look like new ones would make the chain claim a history
+it did not witness.
+
+and the export is jsonl as well as json. an attestation is only worth something if
+somebody else can check it, and a bundle that needs our parser to read is a bundle that
+needs our word for it. one object per line survives grep, diff, wc and a spreadsheet, and
+`POST /crews/{id}/audit/verify` checks it with nothing but the text.

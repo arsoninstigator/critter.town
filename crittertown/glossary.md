@@ -367,6 +367,16 @@ that makes it a claim: it composes every agent's context and every body of reach
 looks for the criteria in them, so a slice added later that happens to carry one fails there
 instead of quietly making the next metric meaningless.
 
+### crew stream
+
+the crew's own order, as a chain. every audit row carries `team_seq`, `team_prev` and
+`team_hash`, and one head per crew (`crew_audit_heads`) is advanced in the same
+transaction that writes the row. the per-agent chain answers "was this agent's story
+edited"; the crew stream answers "did these rows happen in this order", which a per-agent
+chain cannot, since a row moved from one agent's trail into another's breaks neither.
+`verify_crew` walks it, and rows written before v26 read back as `team_seq` 0 and are
+counted as pre-crew rather than reported broken.
+
 ### workspace import
 
 reading an agent out of the shape another tool stores it in. openclaw is a directory of

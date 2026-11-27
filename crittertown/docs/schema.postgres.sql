@@ -266,6 +266,17 @@ create table if not exists agent_audit (
 );
 create index if not exists agent_audit_agent on agent_audit (agent_id, seq);
 
+-- v26: the crew stream. per-agent chains prove an agent's own rows were not edited, but
+-- they say nothing about the order two agents' rows happened in: a row can be lifted out
+-- of one chain and dropped into the other without breaking either. one head per crew,
+-- advanced in the same transaction as the row, makes the interleaving itself checkable.
+create table if not exists crew_audit_heads (
+    team_id text primary key,
+    seq integer not null default 0,
+    hash text not null default '',
+    updated_date double precision not null
+);
+
 -- shifts: a rotation is arithmetic, not a cron job. slot_index = (now - anchor) //
 -- slot, and who is on duty is rotation[slot_index % len(rotation)]. nothing drifts
 -- because nothing is stored except the plan.

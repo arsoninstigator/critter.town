@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 SCHEMA = """
 create table if not exists meta (
@@ -285,6 +285,17 @@ create table if not exists agent_audit (
     created_date real not null
 );
 create index if not exists agent_audit_agent on agent_audit (agent_id, seq);
+
+-- v26: the crew stream. per-agent chains prove an agent's own rows were not edited, but
+-- they say nothing about the order two agents' rows happened in: a row can be lifted out
+-- of one chain and dropped into the other without breaking either. one head per crew,
+-- advanced in the same transaction as the row, makes the interleaving itself checkable.
+create table if not exists crew_audit_heads (
+    team_id text primary key,
+    seq integer not null default 0,
+    hash text not null default '',
+    updated_date real not null
+);
 
 -- shifts: a rotation is arithmetic, not a cron job. slot_index = (now - anchor) //
 -- slot, and who is on duty is rotation[slot_index % len(rotation)]. nothing drifts
@@ -1160,6 +1171,11 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
         "signer": "text not null default ''",
         "pubkey": "text not null default ''",
         "sig": "text not null default ''",
+        # the crew-wide position of this row, and the crew chain's own hash for it.
+        # rows written before v26 read back as team_seq 0 and are reported, not broken.
+        "team_seq": "integer not null default 0",
+        "team_prev": "text not null default ''",
+        "team_hash": "text not null default ''",
     },
     # a workflow is inert until its status says otherwise
     "workflows": {

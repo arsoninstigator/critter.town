@@ -215,7 +215,15 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
-### crew templates, and the skeleton
+### the crew's trail
+
+`GET /crews/{id}/audit` answers the whole bundle: entries in crew order, the crew verdict,
+each agent's verdict, and a verdict on the bundle itself. `GET /crews/{id}/audit.jsonl`
+returns the same entries as ndjson, one object per line, so a trail can be grepped, diffed
+and counted. `POST /crews/{id}/audit/verify` with `{"jsonl": "..."}` checks a trail that
+arrived from somewhere else, using nothing but the trail.
+
+## crew templates, and the skeleton
 
 `GET /crews/{id}/template` answers a document: schema `crittertown.crew/1`, the crew's name,
 mission and review mode, each agent's name, role, kind, hosting, model, system prompt, skills
