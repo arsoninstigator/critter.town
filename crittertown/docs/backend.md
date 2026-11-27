@@ -524,3 +524,41 @@ output silence:
 
 the schema is 19: `tasks` gained `last_output_at`, `output_seq`, `lease_started_at` and
 `watchdog_of`, and `silence_decisions` holds the answers.
+
+## a premise is hashed, a beat is written down, a room is not the work
+
+three mechanisms, all about the same failure: work that looks finished because nothing said
+otherwise.
+
+**premises.** `work/witness.py` hashes what a run was handed, in three kinds: `brief` (title,
+description, skills, payload minus the keys a run writes back), `knowledge` (the entries
+`Knowledge.cited` returns, the same call the prompt uses so the two cannot diverge) and
+`parent` (the parent card's title, evidence and payload). rows go into `witnesses` at
+dispatch, before the first turn, keyed by run. `compare` names three changes: `changed`,
+`removed` and `added`. a removed premise is the loudest, because the run was made from
+something that no longer exists.
+
+routes: `GET /cards/{id}/premises?run_id=` for what one run was made from, `GET
+/cards/{id}/drift` for one card, `GET /crews/{id}/drift?limit=` for the crew, which reports
+`checked`, `drifted` and only the drifted cards. the sweep is read-only on purpose.
+
+**waivers.** `manage/waivers.py` holds the rule the board applies. a card leaving `review`
+for `done` on a reviewed crew may be signed by a person, by a crewmate, or by a service only
+if a waiver exists on that card for the beat. the reason has a floor of 20 characters, one
+waiver per beat, and the waiver is an audit-visible row rather than a flag. `kanban.edit`
+exists so a brief can be corrected after a card exists, which is also what makes brief drift
+reachable: `PATCH /cards/{id}` with `title`, `description`, `payload`, `priority` or
+`required_skills`, recorded as an `edited` event.
+
+routes: `POST /cards/{id}/waivers` (beat, reason, by), `GET /cards/{id}/waivers`, `GET
+/crews/{id}/waivers`.
+
+**env blocks.** a `ProviderNotConfigured` or `ProviderFailure` at sandbox start returns
+`decision: env_blocked` instead of spending an attempt: the reservation is released, the
+lease released, `env_blocks` incremented and the card moved back to `ready`. at
+`MAX_ENV_BLOCKS` (3) it parks in `blocked` with the reason, so a provider outage does not
+loop a queue. the card shape now carries `env_blocks` next to `attempts`, because the two
+count different things.
+
+the schema is 29: `witnesses` (team, task, run, kind, ref, digest, chars) and `waivers`
+(team, task, beat, reason, waived_by), plus `tasks.env_blocks`.

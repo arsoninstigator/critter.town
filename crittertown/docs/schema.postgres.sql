@@ -85,6 +85,31 @@ create table if not exists task_events (
 );
 create index if not exists task_events_task on task_events (task_id, created_date);
 
+create table if not exists witnesses (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null references tasks(id) on delete cascade,
+    run_id text not null default '',
+    kind text not null,
+    ref text not null,
+    digest text not null,
+    chars integer not null default 0,
+    created_date double precision not null
+);
+create index if not exists witnesses_run on witnesses (run_id, kind, ref);
+create index if not exists witnesses_task on witnesses (task_id, created_date);
+
+create table if not exists waivers (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null references tasks(id) on delete cascade,
+    beat text not null,
+    reason text not null,
+    waived_by text not null default '',
+    created_date double precision not null
+);
+create index if not exists waivers_task on waivers (task_id, beat);
+
 create table if not exists wakes (
     id text primary key,
     team_id text not null references teams(id) on delete cascade,

@@ -186,13 +186,15 @@ class DispatchUnderLeaseTests(AppCase):
         original = self.app.runner._sandbox
         self.app.runner._sandbox = no_machine
         try:
-            with self.assertRaises(Exception):
-                self.app.runner.dispatch(card["id"])
+            out = self.app.runner.dispatch(card["id"])
         finally:
             self.app.runner._sandbox = original
         task = self.app.kanban.get_task(card["id"])
+        self.assertEqual(out["decision"], "env_blocked")
         self.assertEqual(task["column"], "ready", "a dead machine is a retry, not a funeral")
-        self.assertEqual(task["attempts"], 1)
+        # and not the card's fault: an environment that never opened spends no attempt
+        self.assertEqual(task["attempts"], 0)
+        self.assertEqual(task["env_blocks"], 1)
 
     def test_a_crashed_holder_is_reclaimable(self):
         """the whole point: no process has to remember the holder existed."""

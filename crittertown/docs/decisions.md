@@ -824,3 +824,25 @@ the card leaves review, because a deferral nobody revives is a drop with better 
 the alternative we rejected was making the conflict retryable at the caller. that puts the
 same decision in every trigger, schedule and message handler, and the handler that forgets is
 the one that loses the wake.
+
+## what a card was made from, and what it skipped
+
+three things were silent in the same way. a card could close against a brief, a knowledge
+entry or a parent result that had changed since the run read it; a reviewed card could leave
+review on a service's move with nothing on the record; and a sandbox that never started cost
+the card an attempt, so an outage looked like the work failing.
+
+the witness answers the first. hashing the premises at dispatch makes drift a fact rather
+than a suspicion, and the sweep reports instead of reopening, because re-running closed work
+spends money and reopening a cosmetic drift spends attention. what is hashed is deliberately
+narrow: the brief, the knowledge the seat is shown, the parent result. hashing the whole
+prompt would report drift every time anyone spoke, which is the same as reporting nothing.
+
+the waiver answers the second. the rule is not "review always", because a one line copy fix
+does not need a reviewer's hour; the rule is that skipping a beat is a decision someone
+wrote down. a person and a crewmate are signatures, a service needs a sentence, and the
+reason has a floor, because "n/a" is the silence with a word in it.
+
+the env block answers the third by separating the room from the work. the alternative was to
+treat a dead provider as a runtime failure, which is what the old code did and what made an
+outage look like three bad attempts on a good card.

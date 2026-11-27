@@ -225,10 +225,19 @@ class KnowledgeBase:
         scored.sort(key=lambda pair: (-pair[0], -pair[1]["updated_date"]))
         return [entry for _score, entry in scored[:limit]]
 
+    def cited(self, team_id: str, agent_id: str = "", limit: int = 6) -> list[dict]:
+        """the entries a prompt would carry, in order.
+
+        one selection, read twice: by the block a run is handed and by the witness that
+        hashes what the run was made from. two functions here would drift apart, and the
+        drift would look like a knowledge entry changing when only the selector had.
+        """
+        return self.search(team_id, agent_id=agent_id, limit=limit)
+
     def for_prompt(self, team_id: str, agent_id: str = "", limit: int = 6) -> str:
         """the block a run carries. small on purpose: a knowledge dump in every prompt
         is the same failure as no knowledge at all, one context window later."""
-        entries = self.search(team_id, agent_id=agent_id, limit=limit)
+        entries = self.cited(team_id, agent_id=agent_id, limit=limit)
         if not entries:
             return ""
         lines = ["what this crew already knows (do not re-derive it):"]

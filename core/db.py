@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 SCHEMA = """
 create table if not exists meta (
@@ -104,6 +104,31 @@ create table if not exists task_events (
     created_date real not null
 );
 create index if not exists task_events_task on task_events (task_id, created_date);
+
+create table if not exists witnesses (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null references tasks(id) on delete cascade,
+    run_id text not null default '',
+    kind text not null,
+    ref text not null,
+    digest text not null,
+    chars integer not null default 0,
+    created_date real not null
+);
+create index if not exists witnesses_run on witnesses (run_id, kind, ref);
+create index if not exists witnesses_task on witnesses (task_id, created_date);
+
+create table if not exists waivers (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    task_id text not null references tasks(id) on delete cascade,
+    beat text not null,
+    reason text not null,
+    waived_by text not null default '',
+    created_date real not null
+);
+create index if not exists waivers_task on waivers (task_id, beat);
 
 create table if not exists wakes (
     id text primary key,
@@ -1117,6 +1142,9 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
         "idle_freeze_days": "integer not null default 0",
     },
     "tasks": {
+        # v29: a card whose environment could not be provided is not a failed attempt, so
+        # the count is kept apart from attempts and blocks the card after a few of them
+        "env_blocks": "integer not null default 0",
         "channel_id": "text references channels(id) on delete set null",
         # v12: a card in someone's hands is a lease with an expiry, not a status. an
         # expiry carried on the row is what makes a dead holder visible without a

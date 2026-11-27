@@ -26,10 +26,16 @@ from core.config import Settings
 from agents.crews import CrewService
 from core.db import Store, dumps, loads, new_id, now
 from work import topology
-from core.errors import CritterTownError, NotAllowed, NotFound, ValidationError
+from core.errors import (CritterTownError, NotAllowed, NotFound, ProviderFailure,
+                         ProviderNotConfigured, ValidationError)
 from ingredients.projectmanagement.kanban.board import KanbanService
 from agents.runtime import AgentModel, answer_text, build_model, render_prompt
 from sandbox import Handle, ProviderRegistry
+
+# how many times a card may be handed to an environment that never started before it stops
+# asking. three is the number of providers a crew typically has configured, so a card that
+# has tried all of them has learned what it can from retrying
+MAX_ENV_BLOCKS = 3
 
 
 class CrewRunner:
@@ -73,6 +79,8 @@ class CrewRunner:
         # set by the composition root: a reason to work is recorded before it is acted on,
         # so a wake that cannot run now is joined or kept instead of lost
         self.wakes = None
+        # set by the composition root: what the run was handed, hashed, so drift is visible
+        self.witness = None
         self.crews = CrewService(store, registry)
         self.kanban = KanbanService(store)
         self.a2a = A2AService(store)
@@ -219,7 +227,12 @@ class CrewRunner:
         error = ""
         result: dict = {}
         try:
-            provider, handle = self._sandbox(agent, task)
+            try:
+                provider, handle = self._sandbox(agent, task)
+            except (ProviderNotConfigured, ProviderFailure) as blocked:
+                # the work did not fail, the room did not open. spending an attempt on
+                # that charges the card for the environment's problem
+                return self._environment_blocked(task, agent, blocked, wake, reservation)
             self._insert_run(run_id, task, agent, provider.name, handle.ref)
             if wake is not None:
                 self.wakes.delivered(wake["wake_id"], run_id)
@@ -244,6 +257,15 @@ class CrewRunner:
                     if self.knowledge is not None else ""
                 )),
             )
+            if self.witness is not None:
+                # hashed here rather than at claim time, because this is the moment the
+                # set is decided: the brief, the knowledge this seat is shown, the parent
+                try:
+                    self.witness.record_for(run_id, task, agent_id=agent["id"])
+                except CritterTownError:
+                    # a card that cannot be witnessed is still worth running; the sweep
+                    # reports it as unwitnessed rather than pretending it was checked
+                    pass
             system_prompt = agent["system_prompt"] or (
                 f"you are {agent['name']}, {agent['role'] or 'a member'} of the {team['name']} crew."
             )
@@ -458,6 +480,48 @@ class CrewRunner:
             self.profile.retire_sidecars(task_id)
         except CritterTownError:
             pass
+
+    def _environment_blocked(self, task: dict, agent: dict, exc: CritterTownError,
+                             wake: dict | None, reservation: dict | None) -> dict:
+        """the room did not open: no attempt spent, the card goes back, the wake stays.
+
+        repeated blocks are the one case that must not loop: after MAX_ENV_BLOCKS the card
+        blocks with the reason, because a crew whose provider is down should stop asking
+        rather than burn a queue on it.
+        """
+        task_id = task["id"]
+        blocks = int(task.get("env_blocks") or 0) + 1
+        if reservation is not None and self.budget is not None:
+            self.budget.release(reservation["id"], reason="the environment did not start")
+        if self.custody is not None:
+            try:
+                self.custody.release(task_id)
+            except CritterTownError:
+                pass
+        with self.store.tx() as c:
+            c.execute("update tasks set env_blocks = ? where id = ?", (blocks, task_id))
+        self.crews.update_agent(agent["id"], status="idle")
+        target = "ready"
+        if blocks >= MAX_ENV_BLOCKS:
+            target = "blocked"
+        try:
+            self.kanban.move(task_id, target, "system",
+                             note=f"environment unavailable: {exc.code} ({blocks}x)")
+        except CritterTownError:
+            # a card that cannot be moved is still reported as blocked by the return value
+            pass
+        return {
+            "run_id": "",
+            "task": self.kanban.get_task(task_id),
+            "agent": {"id": agent["id"], "name": agent["name"]},
+            "decision": "env_blocked",
+            "reason": exc.code,
+            "wake": wake,
+            "env_blocks": blocks,
+            "steps": [],
+            "result": {},
+            "error": f"{exc.code}: {exc.message}",
+        }
 
     def _insert_run(self, run_id: str, task: dict, agent: dict, provider: str, sandbox: str) -> None:
         with self.store.tx() as c:

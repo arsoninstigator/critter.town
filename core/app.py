@@ -53,6 +53,8 @@ from work.workflows import WorkflowService
 from work.custody import Custody
 from work.liveness import Liveness
 from work.wake import WakeQueue
+from work.witness import Witness
+from manage.waivers import Waiver
 from work.evals import EvalService
 from work.convergence import ConvergenceService
 from work.delegation import DelegationService
@@ -111,6 +113,8 @@ class App:
     sagas: SagaService
     custody: Custody
     wakes: WakeQueue
+    witness: Witness
+    waivers: Waiver
     liveness: Liveness
     evals: EvalService
     convergence: ConvergenceService
@@ -266,6 +270,12 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # now joins the run already on the card or waits behind a person instead of vanishing
     wakes = WakeQueue(store)
     runner.wakes = wakes
+    # what a run was made from, hashed, so a card cannot close against a premise that moved
+    witness = Witness(store, kanban=kanban, knowledge=knowledge)
+    runner.witness = witness
+    # a beat a card did not walk is written down, or the card does not leave review
+    waivers = Waiver(store)
+    kanban.waivers = waivers
     # an eval reads the crew and the same model the runner uses, so a candidate is
     # measured against the prompt the crew would actually send
     evals = EvalService(store, crews=crews, model=runner.model)
@@ -427,6 +437,8 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         sagas=sagas,
         custody=custody,
         wakes=wakes,
+        witness=witness,
+        waivers=waivers,
         liveness=liveness,
         evals=evals,
         convergence=convergence,

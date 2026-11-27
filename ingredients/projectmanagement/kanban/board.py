@@ -19,6 +19,7 @@ from core.db import Store, dumps, loads, new_id, now
 CLAIM_WINDOW_SECONDS = 900.0
 LEASE_SECONDS = 300.0
 from core.errors import NotAllowed, NotFound, ValidationError
+from manage import waivers as waiver
 from work import convergence
 from work.evidence import KINDS, evidence_fits, expected
 
@@ -69,6 +70,8 @@ class KanbanService:
         # set by the composition root: a parent whose lanes are still out cannot be
         # signed off, and the barrier is where that is recorded
         self.convergence = None
+        # set by the composition root: a reviewed card needs a reviewer or a written waiver
+        self.waivers = None
 
     # ---- tasks ---------------------------------------------------------
     def create_task(
@@ -236,6 +239,20 @@ class KanbanService:
                     "or another agent",
                     task_id=task["id"], actor=actor)
 
+    def _check_review(self, task: dict, actor: str, column: str) -> None:
+        """a reviewed card does not leave review silently.
+
+        the assignee is already refused by `_check_actor`, so what this adds is the case
+        that used to be invisible: a crew's own service closing the card. a person and a
+        crewmate are signatures; a service needs a waiver on the record saying why not.
+        """
+        if column != "done" or task["column"] != "review":
+            return
+        row = self.store.one("select review_mode from teams where id = ?", (task["team_id"],))
+        if not row or row["review_mode"] != "reviewed":
+            return
+        waiver.may_leave_review(task, actor, INTERNAL_ACTORS, self.waivers)
+
     def _check_barrier(self, task_id: str) -> None:
         """a parent whose lanes are still out cannot be signed off.
 
@@ -333,6 +350,7 @@ class KanbanService:
                 f"illegal transition {current} -> {column}", allowed=sorted(allowed)
             )
         self._check_actor(task, actor, column)
+        self._check_review(task, actor, column)
         patch = patch_for(column, now())
         if column == "done":
             # the short way to done is still the gate: evidence is checked here too, so
@@ -348,6 +366,45 @@ class KanbanService:
             for key, value in patch.items():
                 c.execute(f"update tasks set {key} = ? where id = ?", (value, task_id))
         self._event(task_id, "moved", actor, {"from": current, "to": column, "note": note})
+        return self.get_task(task_id)
+
+    def edit(self, task_id: str, values: dict, actor: str = "owner") -> dict:
+        """the brief is a row, so it can be corrected after a card exists.
+
+        only the parts a person writes: the column, the lease and the evidence are moved
+        by the board, and letting a request body set them would be a second way to close a
+        card. the edit is an event because a premise that changed under a run is exactly
+        what the witness sweep exists to notice, and someone should be able to see when.
+        """
+        task = self.get_task(task_id)
+        allowed = {"title", "description", "payload", "priority", "required_skills"}
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise ValidationError(
+                f"a card's brief is edited with {sorted(allowed)}", unknown=unknown)
+        patch: dict = {}
+        if "title" in values:
+            title = str(values["title"] or "").strip()
+            if not title:
+                raise ValidationError("a card needs a title", field="title")
+            patch["title"] = title[:200]
+        if "description" in values:
+            patch["description"] = str(values["description"] or "")
+        if "payload" in values:
+            if not isinstance(values["payload"], dict):
+                raise ValidationError("a payload is an object", field="payload")
+            patch["payload"] = dumps(values["payload"])
+        if "priority" in values:
+            patch["priority"] = int(values["priority"] or 0)
+        if "required_skills" in values:
+            patch["required_skills"] = dumps(list(values["required_skills"] or []))
+        if not patch:
+            return task
+        columns = ", ".join(f"{name} = ?" for name in patch)
+        with self.store.tx() as c:
+            c.execute(f"update tasks set {columns}, updated_date = ? where id = ?",
+                      tuple(patch.values()) + (now(), task_id))
+        self._event(task_id, "edited", actor, {"fields": sorted(patch)})
         return self.get_task(task_id)
 
     def assign(self, task_id: str, agent_id: str | None, actor: str = "system") -> dict:
@@ -371,6 +428,8 @@ class KanbanService:
         column: str = "done", evidence: str = "",
     ) -> dict:
         task = self.get_task(task_id)
+        # the short path to done is the same gate as the long one, review included
+        self._check_review(task, actor, column)
         with self.store.tx() as c:
             c.execute(
                 "update tasks set result = ?, updated_date = ? where id = ?",
@@ -441,6 +500,9 @@ class KanbanService:
             "last_output_at": row["last_output_at"] if "last_output_at" in row.keys() else None,
             "output_seq": int(row["output_seq"] or 0) if "output_seq" in row.keys() else 0,
             "watchdog_of": row["watchdog_of"] if "watchdog_of" in row.keys() else "",
+            # a card whose environment never opened: counted apart from attempts, because
+            # the card did not fail, the room did
+            "env_blocks": int(row["env_blocks"] or 0) if "env_blocks" in row.keys() else 0,
             "created_date": row["created_date"],
             "updated_date": row["updated_date"],
         }

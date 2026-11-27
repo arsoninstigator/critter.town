@@ -84,11 +84,25 @@ expiry on the row, `renew` pushes the expiry out one turn at a time, and `comple
 behind, so the sweep can see it without anyone remembering the run happened. `sidecars`
 never take custody: they help with a card, they do not own one.
 
+### drift
+a premise that moved after a run was made from it. at dispatch the brief, the knowledge
+entries the seat is shown and the parent card's result are hashed into `witnesses`; the sweep
+recomputes them and names what changed, was removed or appeared. it reports, it never
+reopens: re-running closed work spends money and reopening a card that drifted cosmetically
+spends attention. `GET /cards/{id}/drift` is one card, `GET /crews/{id}/drift` the crew.
+
 ### department
 the hierarchy, kept explicit: one coordinator, members reporting to it, departments that
 nest. routing a card to a department puts it on the coordinator's desk, and escalation
 walks up the reporting line as a gated a2a message. hierarchy for accountability,
 channels for conversation.
+
+### env block
+a card whose environment never opened. the room is not the work, so a provider that cannot
+start spends no attempt: the card goes back to `ready` with `env_blocks` incremented, the
+budget reservation is released rather than settled, and the wake stays. after three blocks it
+parks in `blocked` saying the environment was unavailable, because a crew whose provider is
+down should stop asking rather than burn a queue on it.
 
 ### evidence
 the reference that closes a card, and the reason the review gate is worth walking. a
@@ -135,6 +149,12 @@ structural instead of a convention. writes replace, they never deep merge, and
 composition happens once, whole-value, with the losing default reported as `shadowed`.
 `GET /agents/{id}/profile` returns the config plus a fingerprint and the problems it can
 prove; `GET /crews/{id}/isolation` says whether two agents have become the same agent.
+
+### premise
+what a run was made from: the brief, the knowledge it was told to rely on, and the parent
+card whose result it was handed. hashed at dispatch so drift is a fact about the card rather
+than an opinion about it, and narrow on purpose: the prompt also carries intent, inbox, crew
+context and lessons, and hashing all of that would report drift every time anyone spoke.
 
 ### provenance
 every agent has one permanent `agent_key` (alphanumeric, generated once, refused on
@@ -195,6 +215,12 @@ with `${path}` placeholders. card moves, room messages, finished workflows and t
 nightly beat all reach the same engine, and the queue is schedule's or the sqlite one.
 `install_pack` adds a reviewed set of rules (the overnight pack) in one idempotent call,
 and `trigger_log` is the answer to "what actually fired last night".
+
+### waiver
+a beat a card did not walk, written down. review is a column and a crew's own service may
+move a card out of it, so a reviewed card could reach `done` with nobody having looked and
+nothing on the record saying why. a person and a crewmate are signatures; a service needs a
+waiver, and a waiver needs a sentence: `POST /cards/{id}/waivers` with `beat` and `reason`.
 
 ### workflow
 a dag of seven node types, validated on save (no cycles, no dangling deps), executed with

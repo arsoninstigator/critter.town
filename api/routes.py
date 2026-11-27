@@ -437,6 +437,45 @@ def create_api(app: App | None = None) -> FastAPI:
                                   reason="missing_target")
         return app.mandate.check(team_id, agent_id, task_id)
 
+    @api.patch("/cards/{task_id}")
+    def edit_card(task_id: str, payload: dict = Body(...)) -> dict:
+        return app.kanban.edit(task_id, body(payload), actor=str(body(payload).get("actor") or "owner"))
+
+    # ---- premises and waivers -------------------------------------------
+    # what a run was made from, hashed at dispatch and compared later. a card that closes
+    # against a brief, a knowledge entry or a parent result that moved is drift, and the
+    # sweep names it rather than reopening anything on its own
+    @api.get("/cards/{task_id}/premises")
+    def card_premises(task_id: str, run_id: str = Query("")) -> dict:
+        return {"premises": app.witness.for_task(task_id, run_id=run_id)}
+
+    @api.get("/cards/{task_id}/drift")
+    def card_drift(task_id: str) -> dict:
+        return app.witness.drift(task_id)
+
+    @api.get("/crews/{team_id}/drift")
+    def crew_drift(team_id: str, limit: int = Query(200)) -> dict:
+        app.crews.get_team(team_id)
+        return app.witness.sweep(team_id, limit=limit)
+
+    # a beat a card did not walk is written down, or the card does not leave review
+    @api.post("/cards/{task_id}/waivers")
+    def grant_waiver(task_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload)
+        task = app.kanban.get_task(task_id)
+        return app.waivers.grant(task, beat=str(data.get("beat") or "review"),
+                                 reason=str(data.get("reason") or ""),
+                                 by=str(data.get("by") or "owner"))
+
+    @api.get("/cards/{task_id}/waivers")
+    def list_waivers(task_id: str) -> dict:
+        return {"waivers": app.waivers.for_task(task_id)}
+
+    @api.get("/crews/{team_id}/waivers")
+    def crew_waivers(team_id: str, limit: int = Query(50)) -> dict:
+        app.crews.get_team(team_id)
+        return {"waivers": app.waivers.for_crew(team_id, limit=limit)}
+
     # a wake is a reason for a card to be worked. raising one records the reason before
     # anything acts on it, so a trigger that fires while another agent holds the card is
     # joined or kept rather than lost
