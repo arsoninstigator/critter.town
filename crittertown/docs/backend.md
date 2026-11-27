@@ -619,3 +619,30 @@ routes: `GET /crews/{id}/efficiency?days=7&compare=true&durability_days=7` and
 
 no schema change: the ledger already holds settled cents per task, and the review move already
 sits in `task_events`.
+
+## the visible half of the criteria, and the distance to the sealed half
+
+`work/holdout.py` already keeps the criteria out of the crew's reach. what it could not say is
+whether the crew did the work or fitted the examples it was handed, because there was nothing
+to compare against. `holdout_public` holds the visible half: the examples a crew may read, set
+through `POST /crews/{id}/holdout/public` and read back through `GET`. each example's scorer
+carries its own expect, exactly as a sealed scenario does, so the same criterion cannot be read
+one way in the visible half and another in the seal.
+
+`partial(public_cells, holdout_cells, min_scenarios, min_holdout_rate, max_gap)` is the whole
+rule and takes nothing but scores. a cell is decided only at full marks. it answers both rates,
+the gap between them, a verdict of honest, fitted or thin, an `accepted` flag, named reasons
+(`too_few_scenarios`, `holdout_below_floor`, `fitted_to_the_examples`, `no_public_examples`) and
+the floors it used, so a refusal can be argued with instead of guessed at. a crew with no
+visible examples is unmeasured rather than failed: `no_public_examples` blocks acceptance but is
+not counted against the sealed half.
+
+`gap(team_id, model)` scores both sets with the same model and the same scorer, and writes a
+`holdout_gaps` row carrying both rates, the gap, the verdict, the reasons, whether the run was
+clean (a tampered seal taints it, as with a plain run) and a digest of the example set, because
+a gap measured against different examples is a different measurement. `acceptance(team_id)`
+answers the gate from the last run, or `unmeasured` when there has never been one, and refuses a
+tainted run by name.
+
+routes: `GET|POST /crews/{id}/holdout/public`, `POST|GET /crews/{id}/holdout/gap`,
+`GET /crews/{id}/holdout/acceptance`. schema 30 adds `holdout_public` and `holdout_gaps`.

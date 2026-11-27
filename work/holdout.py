@@ -31,6 +31,24 @@ from work import evals
 # who may read the criteria. everything else is refused by name, not by omission.
 READERS = ("eval", "owner", "system")
 
+# grading the gap between what the crew could read and what it could not. the numbers are
+# defaults a crew can move, and the reasons are named so a refusal can be argued with.
+MIN_SCENARIOS = 4
+MIN_HOLDOUT_RATE = 0.8
+MAX_GAP = 0.25
+
+GAP_RULES = (
+    "the public examples are the ones the crew can read, and the sealed scenarios are the ones"
+    " it cannot",
+    "a scenario counts as decided only at full marks, because a half answer is a miss with a"
+    " nice report attached",
+    "the gap is the public rate minus the sealed rate, so a positive gap is fitting and a"
+    " negative one is a crew that does better on what it never saw",
+    "fewer sealed scenarios than the floor answers thin: a rate over two rows is a coin toss",
+    "acceptance needs the sealed rate at or above its floor and the gap at or below its"
+    " ceiling, so passing the examples the crew could read accepts nothing",
+)
+
 
 def _norm(text: str) -> str:
     return " ".join(str(text or "").lower().split())
@@ -59,6 +77,61 @@ def _digest(rows: list[dict]) -> str:
          for r in sorted(rows, key=lambda r: r["name"])],
         sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _rate(passed: int, total: int) -> float | None:
+    """a rate over nothing is not zero, it is unknown."""
+    return None if total <= 0 else round(passed / total, 4)
+
+
+def partial(public: list[dict], holdout: list[dict], min_scenarios: int = MIN_SCENARIOS,
+            min_holdout_rate: float = MIN_HOLDOUT_RATE, max_gap: float = MAX_GAP) -> dict:
+    """grade both halves and say what the distance between them means.
+
+    cells are `{"score": float}`, where the score is already the scorer's own 0 to 1. this is
+    deliberately not all-or-nothing: a crew that clears three of five sealed scenarios is
+    worse than one that clears five and better than one that clears none, and a report that
+    rounds that to "failed" throws away the only number worth comparing next week.
+    """
+    def decided(cells: list[dict]) -> tuple[int, int]:
+        return (sum(1 for c in cells if float(c.get("score") or 0.0) >= 1.0), len(cells))
+
+    public_passed, public_total = decided(public)
+    sealed_passed, sealed_total = decided(holdout)
+    public_rate = _rate(public_passed, public_total)
+    sealed_rate = _rate(sealed_passed, sealed_total)
+    gap = None if public_rate is None or sealed_rate is None else round(public_rate - sealed_rate, 4)
+
+    reasons: list[str] = []
+    if sealed_total < int(min_scenarios):
+        reasons.append("too_few_scenarios")
+    if sealed_rate is not None and sealed_rate < min_holdout_rate:
+        reasons.append("holdout_below_floor")
+    if gap is not None and gap > max_gap:
+        reasons.append("fitted_to_the_examples")
+    if public_total == 0:
+        reasons.append("no_public_examples")
+
+    if sealed_total < int(min_scenarios) or public_total == 0:
+        verdict = "thin"
+    elif gap is not None and gap > max_gap:
+        verdict = "fitted"
+    else:
+        verdict = "honest"
+
+    blocking = [r for r in reasons if r != "no_public_examples"]
+    return {
+        "public": {"total": public_total, "passed": public_passed, "rate": public_rate},
+        "holdout": {"total": sealed_total, "passed": sealed_passed, "rate": sealed_rate},
+        "gap": gap,
+        "verdict": verdict,
+        "accepted": not blocking,
+        "reasons": reasons,
+        "floors": {"min_scenarios": int(min_scenarios),
+                   "min_holdout_rate": float(min_holdout_rate),
+                   "max_gap": float(max_gap)},
+        "rules": list(GAP_RULES),
+    }
 
 
 class HoldoutService:
@@ -306,6 +379,138 @@ class HoldoutService:
                                           "ref": agent["id"]})
         return {"ok": not leaks and not tampered, "scenarios": len(rows), "leaks": leaks,
                 "tampered": tampered, "checked": checked}
+
+    # ---- the visible half, and the distance to the sealed half ---------------
+    def public(self, team_id: str) -> list[dict]:
+        """the examples the crew may read. no wall here, and none wanted: this is the half
+        the work is allowed to fit."""
+        return [
+            {"id": row["id"], "name": row["name"], "input": row["input"],
+             "expect": row["expect"],
+             "scorer": loads(row["scorer"], {}) if isinstance(row["scorer"], str)
+             else row["scorer"]}
+            for row in self.store.query(
+                "select * from holdout_public where team_id = ? order by created_date, rowid",
+                (team_id,))
+        ]
+
+    def set_public(self, team_id: str, examples: list[dict], actor: str = "owner") -> dict:
+        """replace the visible examples. a set with no expect is a prompt, not a criterion."""
+        if self.crews is not None:
+            self.crews.get_team(team_id)
+        if not isinstance(examples, list) or not examples:
+            raise ValidationError("the public examples are a list of at least one example",
+                                  reason="no_public_examples")
+        rows = []
+        for i, example in enumerate(examples):
+            if not isinstance(example, dict):
+                raise ValidationError("an example is an object", reason="example_not_an_object",
+                                      index=i)
+            name = str(example.get("name") or "").strip()
+            text = str(example.get("input") or "").strip()
+            expect = str(example.get("expect") or "").strip()
+            if not name or not text or not expect:
+                raise ValidationError(
+                    "an example needs a name, an input and an expect", index=i,
+                    reason="example_incomplete")
+            scorer = dict(example.get("scorer") or {"kind": "contains"})
+            if scorer.get("kind") not in evals.SCORERS:
+                raise ValidationError("unknown scorer on an example", index=i,
+                                      reason="scorer_unknown")
+            # the scorer carries its own target, exactly as a sealed scenario does, so the
+            # same expect cannot be read one way in the visible half and another in the seal
+            scorer.setdefault("expect", expect)
+            evals.score(scorer, expect)
+            rows.append({"name": name, "input": text, "expect": expect, "scorer": scorer})
+        ts = now()
+        with self.store.tx() as c:
+            c.execute("delete from holdout_public where team_id = ?", (team_id,))
+            for row in rows:
+                c.execute(
+                    """insert into holdout_public (id, team_id, name, input, expect, scorer,
+                           created_date) values (?,?,?,?,?,?,?)""",
+                    (new_id("hpb"), team_id, row["name"], row["input"], row["expect"],
+                     dumps(row["scorer"]), ts))
+        return {"team_id": team_id, "examples": len(rows), "actor": actor}
+
+    def _score_set(self, model: Any, cases: list[dict], prompt: str) -> list[dict]:
+        cells = []
+        for case in cases:
+            action = model.act(prompt, case["input"])
+            output = evals.output_of(action if isinstance(action, dict) else {})
+            points, detail = evals.score(case["scorer"], output)
+            cells.append({"scenario": case["name"], "score": points, "detail": detail})
+        return cells
+
+    def gap(self, team_id: str, model: Any, actor: str = "owner",
+            min_scenarios: int = MIN_SCENARIOS, min_holdout_rate: float = MIN_HOLDOUT_RATE,
+            max_gap: float = MAX_GAP) -> dict:
+        """score the examples the crew could read and the criteria it could not, and record
+        the distance. the record is the point: next week's gap is only a comparison if this
+        week's was written down."""
+        if model is None:
+            raise ValidationError("no model is configured, so there is nothing to measure",
+                                  reason="no_model")
+        examples = self.public(team_id)
+        sealed = self.scenarios(team_id, actor="eval", reason="gap")
+        if not sealed:
+            raise ValidationError("no sealed holdout to compare against",
+                                  reason="no_scenarios")
+        prompt = "you are an agent on a crew. answer the question directly and briefly."
+        found = partial(self._score_set(model, examples, prompt),
+                        self._score_set(model, sealed, prompt),
+                        min_scenarios=min_scenarios, min_holdout_rate=min_holdout_rate,
+                        max_gap=max_gap)
+        state = self.state(team_id)
+        # a tainted run still records its number and says so, exactly as the plain run does
+        found["clean"] = not state["tampered"]
+        found["tampered"] = state["tampered"]
+        # the examples are fingerprinted into the record: a gap against a different set of
+        # examples is a different measurement, and next week's comparison needs to know
+        found["public_digest"] = _digest(examples) if examples else ""
+        found["team_id"] = team_id
+        gap_id = new_id("hgp")
+        with self.store.tx() as c:
+            c.execute(
+                """insert into holdout_gaps (id, team_id, public_total, public_passed,
+                       holdout_total, holdout_passed, gap, public_digest, verdict, accepted,
+                       clean, reasons, actor, created_date)
+                   values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (gap_id, team_id, found["public"]["total"], found["public"]["passed"],
+                 found["holdout"]["total"], found["holdout"]["passed"], found["gap"],
+                 found["public_digest"], found["verdict"],
+                 1 if found["accepted"] else 0, 1 if found["clean"] else 0,
+                 dumps(found["reasons"]), actor, now()))
+        found["id"] = gap_id
+        return found
+
+    def gaps(self, team_id: str, limit: int = 20) -> list[dict]:
+        return [
+            {"id": row["id"], "public_total": row["public_total"],
+             "public_passed": row["public_passed"], "holdout_total": row["holdout_total"],
+             "holdout_passed": row["holdout_passed"], "gap": row["gap"],
+             "public_digest": row["public_digest"],
+             "verdict": row["verdict"], "accepted": bool(row["accepted"]),
+             "clean": bool(row["clean"]), "reasons": loads(row["reasons"], []),
+             "actor": row["actor"], "created_date": row["created_date"]}
+            for row in self.store.query(
+                "select * from holdout_gaps where team_id = ? order by created_date desc"
+                " limit ?", (team_id, int(limit)))
+        ]
+
+    def acceptance(self, team_id: str) -> dict:
+        """the last gap run, as a yes or no. a stale run is not an answer to right now, so it
+        says how old it is instead of pretending to be current."""
+        runs = self.gaps(team_id, limit=1)
+        if not runs:
+            return {"team_id": team_id, "accepted": False, "verdict": "unmeasured",
+                    "reasons": ["no_gap_run"], "rules": list(GAP_RULES)}
+        last = runs[0]
+        return {"team_id": team_id, "accepted": last["accepted"] and last["clean"],
+                "verdict": last["verdict"],
+                "reasons": last["reasons"] + ([] if last["clean"] else ["tainted_run"]),
+                "gap": last["gap"], "measured_at": last["created_date"],
+                "rules": list(GAP_RULES)}
 
     # ---- the run ------------------------------------------------------------
     def run(self, team_id: str, model: Any, actor: str = "owner") -> dict:

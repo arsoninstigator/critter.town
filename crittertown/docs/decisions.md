@@ -890,3 +890,22 @@ the honest hole is spend we cannot see: a card that closed with no reservation h
 spend, not free spend. `partial` and `correct_with_unknown_spend` say so, and a comparison
 involving a partial window answers `unknown` instead of a delta, because a cheaper number built
 from missing rows is worse than no number.
+
+## the sealed number is only half a measurement, so the gap is the other half
+
+a holdout rate on its own cannot tell a crew that did the work from a crew that fitted the
+examples it was handed, because both clear the sealed set at some rate and the rate alone does
+not say which. the dark-factory submissions that measured this measured the distance between
+the public acceptance examples an agent could read and the holdout it could not, and that
+distance is the tell: a crew at a hundred percent on the examples and forty on the sealed set
+did the examples.
+
+we kept grading partial rather than binary, since three of five is worse than five and better
+than none, and rounding it to failed throws away the number worth comparing next week. what
+acceptance adds is two floors: the sealed rate has a floor and the gap has a ceiling, so a crew
+that clears every example it could read accepts nothing. a crew with no visible examples
+answers thin and unmeasured, not failed, because we have no evidence about fitting either way.
+
+the record keeps a digest of the example set beside both rates. without it, next week's gap
+would be compared against a number measured on different examples, which is the same mistake as
+quoting a rival's baseline.

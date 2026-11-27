@@ -333,6 +333,36 @@ def create_api(app: App | None = None) -> FastAPI:
     def holdout_access(team_id: str, limit: int = Query(50)) -> dict:
         return {"access": app.holdout.access(team_id, limit=limit)}
 
+    # the visible half of the criteria, and the distance to the sealed half. passing the
+    # examples a crew could read accepts nothing
+    @api.get("/crews/{team_id}/holdout/public")
+    def read_public_examples(team_id: str) -> dict:
+        return {"examples": app.holdout.public(team_id)}
+
+    @api.post("/crews/{team_id}/holdout/public")
+    def write_public_examples(team_id: str, payload: dict = Body(...)) -> dict:
+        data = body(payload or {})
+        return app.holdout.set_public(team_id, data.get("examples") or [],
+                                      actor=str(data.get("actor", "owner")))
+
+    @api.post("/crews/{team_id}/holdout/gap")
+    def measure_holdout_gap(team_id: str, payload: dict = Body(default={})) -> dict:
+        data = body(payload or {})
+        model = app.runner.model if getattr(app, "runner", None) is not None else None
+        return app.holdout.gap(
+            team_id, model, actor=str(data.get("actor", "owner")),
+            min_scenarios=int(data.get("min_scenarios", 4)),
+            min_holdout_rate=float(data.get("min_holdout_rate", 0.8)),
+            max_gap=float(data.get("max_gap", 0.25)))
+
+    @api.get("/crews/{team_id}/holdout/gap")
+    def list_holdout_gaps(team_id: str, limit: int = Query(20)) -> dict:
+        return {"gaps": app.holdout.gaps(team_id, limit=limit)}
+
+    @api.get("/crews/{team_id}/holdout/acceptance")
+    def holdout_acceptance(team_id: str) -> dict:
+        return app.holdout.acceptance(team_id)
+
     # ---- the crew's trail, in one order --------------------------------
     # per-agent chains say what one agent did; the crew chain says what happened, in what
     # order, across agents. jsonl because an audit you cannot grep is one you must trust.

@@ -765,6 +765,41 @@ create table if not exists holdout_runs (
     created_date double precision not null
 );
 
+-- v30: the visible half of the criteria, and the gap between it and the sealed half. an agent
+-- that can read its examples will fit them, so the number worth reading is the distance between
+-- the examples it saw and the scenarios it did not.
+create table if not exists holdout_public (
+    id text primary key,
+    team_id text not null,
+    name text not null,
+    input text not null,
+    expect text not null,
+    scorer text not null default '{"kind":"contains"}',
+    created_date double precision not null
+);
+create index if not exists holdout_public_crew on holdout_public (team_id, created_date);
+
+-- one gap run: both rates, the distance between them, and whether the work is acceptable.
+-- a near miss is recorded as a number rather than rounded to a fail, which is the whole point
+-- of grading partially.
+create table if not exists holdout_gaps (
+    id text primary key,
+    team_id text not null,
+    public_total integer not null default 0,
+    public_passed integer not null default 0,
+    holdout_total integer not null default 0,
+    holdout_passed integer not null default 0,
+    gap double precision,
+    public_digest text not null default '',
+    verdict text not null default 'thin',
+    accepted integer not null default 0,
+    clean integer not null default 1,
+    reasons text not null default '[]',
+    actor text not null default 'owner',
+    created_date double precision not null
+);
+create index if not exists holdout_gaps_crew on holdout_gaps (team_id, created_date);
+
 -- v23: skills. a skill is know-how with a name and a trigger, loaded in three stages so a
 -- crew with forty of them does not spend forty bodies of context on a card that needs none.
 create table if not exists skills (

@@ -144,6 +144,22 @@ what sort of work a card is: code, design, research, security, financial, media,
 accounting, support, doc. it is the axis the board was missing, because every gate and
 every acceptance rule had been written for code and silently applied to a deal.
 
+### gap
+the distance between the acceptance examples a crew could read and the sealed scenarios it
+could not: `public rate - sealed rate`. a positive gap is fitting, because the crew did the
+examples and not the work; a negative one is a crew that does better on what it never saw. a
+scenario counts as decided only at full marks, so a half answer is a miss with a nice report
+attached. the gap is `thin` when there are fewer sealed scenarios than the floor or no visible
+examples, because a rate over two rows is a coin toss.
+
+### partial holdout
+grading a crew on the sealed criteria without rounding it to pass or fail. three of five
+scenarios is worse than five and better than none, and the fraction is recorded so next week's
+run is a comparison. acceptance needs the sealed rate at or above its floor (0.8 by default)
+and the gap at or below its ceiling (0.25), so clearing the examples the crew could read
+accepts nothing on its own. every run records both rates, the gap, the verdict, the reasons and
+a fingerprint of the example set it was measured against.
+
 ### handoff
 the shift change, with a body. at every boundary the incoming agent gets a bundle: open
 cards (including the ones the outgoing agent was holding), what is blocked, what is
