@@ -698,6 +698,17 @@ create table if not exists holdout_access (
 );
 create index if not exists holdout_access_crew on holdout_access (team_id, created_date);
 
+-- v27: the seal's fingerprint. a seal nobody can check is a promise, not a wall: the
+-- scenarios are rows, and rows can be edited between the claim and the gate. the digest is
+-- taken over the criteria as sealed, so a later edit is visible instead of silent.
+create table if not exists holdout_seals (
+    team_id text primary key references teams(id) on delete cascade,
+    digest text not null,
+    scenarios integer not null default 0,
+    actor text not null default 'owner',
+    sealed_date double precision not null
+);
+
 -- a scored run, and whether it was clean when it was scored.
 create table if not exists holdout_runs (
     id text primary key,

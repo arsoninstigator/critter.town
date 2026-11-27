@@ -367,6 +367,13 @@ that makes it a claim: it composes every agent's context and every body of reach
 looks for the criteria in them, so a slice added later that happens to carry one fails there
 instead of quietly making the next metric meaningless.
 
+### seal fingerprint
+
+the digest a sealed holdout carries, taken over its criteria at seal time (`work/holdout.py`,
+`holdout_seals`). it exists because the criteria are rows and rows can be edited between the
+claim and the gate: `state()` reports which scenario moved, `verify()` fails, and a run on an
+edited set records its number with `clean: false` rather than a clean score nobody agreed to.
+
 ### model name
 
 what an imported agent asks to be run on. it is a request, not a promise: the deployment

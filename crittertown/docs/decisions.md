@@ -753,3 +753,24 @@ the half that mattered more: a name this deployment does not serve is kept, reco
 `import-source` profile entry, and explained in one sentence naming both values. dropping it
 would make the import look clean and leave the operator's mismatch for the first turn to
 discover, which is the failure this whole import path exists to move earlier.
+
+## the seal carries a fingerprint, because criteria are rows
+
+reading the band dark factory submissions on github turned up one mechanism we did not have
+and one we had half of. the one we did not have, from the DarkestFactory entry: the examiner
+writes a sealed acceptance suite from the specification alone and registers it by hash before
+any work is accepted. our wall hid the criteria and refused re-sealing, which stops a swap by
+the front door. it does not stop an edit to the rows, and an edited row is worse than a
+replaced one: the crew still cannot read it, so the wall looks intact, and the metric now
+measures something nobody agreed to.
+
+so a seal writes two fingerprints. one over the whole set, kept in `holdout_seals`, which
+answers "is this the criteria that were promised". one per scenario, kept on the row, which
+answers "which one moved". `state()` names the rows, `verify()` fails when any moved, and
+`run()` records the number with `clean: false` instead of pretending. the digest leaves out
+the timestamp on purpose: re-sealing identical criteria is the same commitment, and a clock in
+the hash would make an honest re-seal look like a new one.
+
+the half we had: `already_sealed` refused a second seal, which is the same instinct reaching
+only the obvious door. the general rule from that submission is that a claim about criteria
+has to be checkable by whoever is being measured, and a promise is not checkable.

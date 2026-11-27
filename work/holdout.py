@@ -20,6 +20,8 @@ there is no filesystem here to leave a directory out of, so the wall is three ru
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from core.db import Store, dumps, loads, new_id, now
@@ -32,6 +34,31 @@ READERS = ("eval", "owner", "system")
 
 def _norm(text: str) -> str:
     return " ".join(str(text or "").lower().split())
+
+
+def _row_digest(row: dict) -> str:
+    """one scenario's fingerprint, so a tampered set can name the row that moved."""
+    canonical = json.dumps(
+        {"name": row["name"], "input": row["input"], "expect": row["expect"],
+         "scorer": loads(row["scorer"]) if isinstance(row["scorer"], str) else row["scorer"]},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _digest(rows: list[dict]) -> str:
+    """the fingerprint of a sealed set: what was sealed, not when or by whom.
+
+    taken over name, input, expect and scorer in a fixed order, so two crews that sealed
+    the same criteria get the same digest and one crew that edited a row gets a different
+    one. the timestamp is left out on purpose: re-sealing identical criteria is the same
+    commitment, and including the clock would make it look like a new one.
+    """
+    canonical = json.dumps(
+        [{"name": r["name"], "input": r["input"], "expect": r["expect"],
+          "scorer": loads(r["scorer"]) if isinstance(r["scorer"], str) else r["scorer"]}
+         for r in sorted(rows, key=lambda r: r["name"])],
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class HoldoutService:
@@ -144,9 +171,16 @@ class HoldoutService:
             for scenario in clean:
                 c.execute(
                     """insert into holdout_scenarios (id, team_id, name, input, expect,
-                           scorer, sealed_date, created_date) values (?,?,?,?,?,?,?,?)""",
+                           scorer, sealed_date, created_date, digest)
+                       values (?,?,?,?,?,?,?,?,?)""",
                     (new_id("hld"), team_id, scenario["name"], scenario["input"],
-                     scenario["expect"], dumps(scenario["scorer"]), ts, ts))
+                     scenario["expect"], dumps(scenario["scorer"]), ts, ts,
+                     _row_digest(scenario)))
+            c.execute(
+                """insert or replace into holdout_seals
+                       (team_id, digest, scenarios, actor, sealed_date)
+                   values (?,?,?,?,?)""",
+                (team_id, _digest(clean), len(clean), actor, ts))
         self._log(team_id, "", actor, "seal")
         return self.state(team_id)
 
@@ -190,9 +224,13 @@ class HoldoutService:
         runs = self.store.query(
             "select * from holdout_runs where team_id = ? order by created_date desc limit 5",
             (team_id,))
+        seal_row = self.store.one(
+            "select * from holdout_seals where team_id = ?", (team_id,))
         return {
             "scenarios": len(rows),
             "names": [r["name"] for r in rows],
+            "digest": seal_row["digest"] if seal_row else "",
+            "tampered": self._tampered(team_id),
             "sealed_date": rows[0]["sealed_date"] if rows else 0,
             "runs": [{"id": r["id"], "metric": r["metric"], "scenarios": r["scenarios"],
                       "passed": r["passed"], "clean": bool(r["clean"]),
@@ -208,6 +246,34 @@ class HoldoutService:
                  "refused": bool(r["refused"]), "scenario_id": r["scenario_id"],
                  "created_date": r["created_date"]} for r in rows]
 
+    def _tampered(self, team_id: str) -> list[str]:
+        """which sealed scenarios no longer match the fingerprint taken when they were sealed.
+
+        a row edited between the seal and the gate is the quiet version of the failure this
+        module exists for: the crew still cannot read the criteria, and the number it is
+        measured on is not the number it was promised. this names the rows that moved,
+        because "something changed" is a warning nobody can act on.
+        """
+        seal_row = self.store.one(
+            "select * from holdout_seals where team_id = ?", (team_id,))
+        if seal_row is None:
+            return []
+        rows = self.store.query(
+            """select name, input, expect, scorer, digest from holdout_scenarios
+               where team_id = ? order by name""", (team_id,))
+        moved: list[str] = []
+        if _digest(rows) == seal_row["digest"]:
+            return moved
+        if len(rows) != int(seal_row["scenarios"] or 0):
+            moved.append(f"the set holds {len(rows)} scenarios and was sealed with "
+                         f"{int(seal_row['scenarios'] or 0)}")
+        for row in rows:
+            if not row["digest"]:
+                moved.append(f"{row['name']}: sealed before fingerprints were kept")
+            elif _row_digest(row) != row["digest"]:
+                moved.append(f"{row['name']}: edited since it was sealed")
+        return moved
+
     # ---- the check that makes the wall a claim and not a hope ---------------
     def verify(self, team_id: str) -> dict:
         """is any acceptance criterion already inside what the crew can be handed.
@@ -218,8 +284,10 @@ class HoldoutService:
         """
         rows = self.store.query(
             "select name, input, expect from holdout_scenarios where team_id = ?", (team_id,))
+        tampered = self._tampered(team_id)
         if not rows:
-            return {"ok": True, "scenarios": 0, "leaks": [], "checked": 0}
+            return {"ok": not tampered, "scenarios": 0, "leaks": [], "tampered": tampered,
+                    "checked": 0}
         leaks = self.find(team_id, [r["input"] for r in rows] + [r["expect"] for r in rows])
         checked = 0
         if self.context is not None:
@@ -236,7 +304,8 @@ class HoldoutService:
                         if len(_norm(needle)) >= 12 and _norm(needle) in block:
                             leaks.append({"needle": needle[:80], "source": "context",
                                           "ref": agent["id"]})
-        return {"ok": not leaks, "scenarios": len(rows), "leaks": leaks, "checked": checked}
+        return {"ok": not leaks and not tampered, "scenarios": len(rows), "leaks": leaks,
+                "tampered": tampered, "checked": checked}
 
     # ---- the run ------------------------------------------------------------
     def run(self, team_id: str, model: Any, actor: str = "owner") -> dict:
@@ -247,7 +316,9 @@ class HoldoutService:
         cases = self.scenarios(team_id, actor="eval", reason="run")
         if not cases:
             raise ValidationError("no sealed holdout to run", reason="no_scenarios")
-        sealed = self.state(team_id)["sealed_date"]
+        state = self.state(team_id)
+        sealed = state["sealed_date"]
+        tampered = state["tampered"]
         during = self.store.query(
             """select count(*) as n from holdout_access
                where team_id = ? and refused = 1 and created_date >= ?""",
@@ -269,7 +340,8 @@ class HoldoutService:
             c.execute(
                 """insert into holdout_runs (id, team_id, scenarios, passed, metric, clean,
                        access_during, actor, created_date) values (?,?,?,?,?,?,?,?,?)""",
-                (run_id, team_id, len(cases), passed, metric, 0 if attempts else 1,
-                 attempts, actor, now()))
+                (run_id, team_id, len(cases), passed, metric,
+                 0 if attempts or tampered else 1, attempts, actor, now()))
         return {"id": run_id, "metric": metric, "passed": passed, "scenarios": len(cases),
-                "clean": not attempts, "access_during": attempts, "cells": cells}
+                "clean": not attempts and not tampered, "access_during": attempts,
+                "tampered": tampered, "cells": cells}

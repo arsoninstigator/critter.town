@@ -215,7 +215,16 @@ disabled skill is neither offered at level 1 nor loadable.
 the `skills` slice carries level 1 with a 500 character budget, and it is entitled to doer and
 researcher seats only: a reviewer judging a card is not helped by the procedure that made it.
 
-### what a model name means on the way in
+### the seal carries a fingerprint
+
+`holdout.seal()` writes a digest over the sealed criteria into `holdout_seals`, and every
+scenario row keeps its own digest. `state()` reports `tampered` as the scenarios that moved,
+`verify()` fails when any did, and `run()` marks such a run `clean: false` while still
+recording the number. the digest is over what was sealed, not when or by whom, so two crews
+sealing the same criteria share a fingerprint and re-sealing identical criteria is the same
+commitment.
+
+## what a model name means on the way in
 
 every importer runs its model string through `agents/models.py`. a name is kept, a provider
 prefix is stripped, and a sentence is refused into `unmapped` with a warning, because the

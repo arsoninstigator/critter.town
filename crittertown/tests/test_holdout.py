@@ -189,3 +189,73 @@ class RunTests(AppCase):
         doc = self.app.templates.export(self.team["id"])
         self.assertNotIn("welcome aboard", json.dumps(doc))
         self.assertNotIn("holdout", json.dumps(doc))
+
+class FingerprintTests(AppCase):
+    """a seal nobody can check is a promise. these hold the check.
+
+    the failure: the criteria are rows, and a row can be edited between the claim and the
+    gate. the crew still cannot read them, so the wall looks intact, and the metric is now
+    measuring something nobody agreed to. band's dark factory submissions register their
+    acceptance suite by hash before any work is accepted, for exactly this reason.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.team = self.crew()
+
+    def edit(self, name: str, expect: str) -> None:
+        with self.app.store.tx() as c:
+            c.execute("update holdout_scenarios set expect = ? where team_id = ? and name = ?",
+                      (expect, self.team["id"], name))
+
+    def test_a_fresh_seal_is_untouched_and_carries_a_fingerprint(self):
+        state = self.app.holdout.seal(self.team["id"], CRITERIA)
+        self.assertEqual(len(state["digest"]), 64)
+        self.assertEqual(state["tampered"], [])
+
+    def test_identical_criteria_in_two_crews_get_the_same_fingerprint(self):
+        # the digest is over what was sealed, not over who sealed it or when
+        first = self.app.holdout.seal(self.team["id"], CRITERIA)["digest"]
+        other = self.crew("second")
+        self.assertEqual(self.app.holdout.seal(other["id"], CRITERIA)["digest"], first)
+
+    def test_the_order_of_the_scenarios_does_not_change_the_fingerprint(self):
+        first = self.app.holdout.seal(self.team["id"], CRITERIA)["digest"]
+        other = self.crew("second")
+        self.assertEqual(self.app.holdout.seal(other["id"], list(reversed(CRITERIA)))["digest"],
+                         first)
+
+    def test_an_edited_scenario_is_named(self):
+        self.app.holdout.seal(self.team["id"], CRITERIA)
+        self.edit(CRITERIA[0]["name"], "something else entirely")
+        state = self.app.holdout.state(self.team["id"])
+        self.assertEqual(len(state["tampered"]), 1)
+        self.assertIn(CRITERIA[0]["name"], state["tampered"][0])
+
+    def test_a_removed_scenario_is_reported_as_a_size_change(self):
+        self.app.holdout.seal(self.team["id"], CRITERIA)
+        with self.app.store.tx() as c:
+            c.execute("delete from holdout_scenarios where team_id = ? and name = ?",
+                      (self.team["id"], CRITERIA[0]["name"]))
+        self.assertTrue(any("sealed with" in item
+                            for item in self.app.holdout.state(self.team["id"])["tampered"]))
+
+    def test_an_untouched_seal_verifies(self):
+        self.app.holdout.seal(self.team["id"], CRITERIA)
+        self.assertTrue(self.app.holdout.verify(self.team["id"])["ok"])
+
+    def test_a_tampered_seal_fails_the_wall_check(self):
+        self.app.holdout.seal(self.team["id"], CRITERIA)
+        self.edit(CRITERIA[1]["name"], "not the criteria")
+        checked = self.app.holdout.verify(self.team["id"])
+        self.assertFalse(checked["ok"])
+        self.assertTrue(checked["tampered"])
+
+    def test_a_run_on_a_tampered_set_is_not_clean(self):
+        self.app.holdout.seal(self.team["id"], CRITERIA)
+        self.edit(CRITERIA[0]["name"], "something else entirely")
+        out = self.app.holdout.run(self.team["id"], EchoModel())
+        self.assertFalse(out["clean"])
+        self.assertTrue(out["tampered"])
+        # the number is still recorded: a metric with a footnote beats a metric with a lie
+        self.assertIn("metric", out)

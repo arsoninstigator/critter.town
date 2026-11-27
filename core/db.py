@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 SCHEMA = """
 create table if not exists meta (
@@ -718,6 +718,17 @@ create table if not exists holdout_access (
 );
 create index if not exists holdout_access_crew on holdout_access (team_id, created_date);
 
+-- v27: the seal's fingerprint. a seal nobody can check is a promise, not a wall: the
+-- scenarios are rows, and rows can be edited between the claim and the gate. the digest is
+-- taken over the criteria as sealed, so a later edit is visible instead of silent.
+create table if not exists holdout_seals (
+    team_id text primary key references teams(id) on delete cascade,
+    digest text not null,
+    scenarios integer not null default 0,
+    actor text not null default 'owner',
+    sealed_date real not null
+);
+
 -- a scored run, and whether it was clean when it was scored.
 create table if not exists holdout_runs (
     id text primary key,
@@ -1178,6 +1189,11 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
         "team_hash": "text not null default ''",
     },
     # a workflow is inert until its status says otherwise
+    # v27: the fingerprint of each sealed scenario, so a tampered set can name the row that
+    # moved instead of saying "something changed"
+    "holdout_scenarios": {
+        "digest": "text not null default ''",
+    },
     "workflows": {
         "status": "text not null default 'active'",
         "proposed_by_agent_id": "text",
