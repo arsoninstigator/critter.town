@@ -289,8 +289,17 @@ class DefaultTests(EscCase):
 
 
 class BudgetTests(EscCase):
-    def test_a_crew_starts_with_the_default_budget(self):
-        self.assertEqual(self.app.escalations.budget(self.tid), es.DEFAULT_MONTHLY_BUDGET)
+    def test_a_crew_starts_with_no_budget_because_none_was_chosen(self):
+        self.assertIsNone(self.app.escalations.budget(self.tid))
+
+    def test_a_crew_that_never_stated_a_budget_is_never_called_over(self):
+        for _ in range(8):
+            self.raise_one()
+        spend = self.app.escalations.spend(self.tid)
+        self.assertEqual(spend["used"], 8)
+        self.assertIsNone(spend["budget"])
+        self.assertFalse(spend["over"])
+        self.assertEqual(spend["finding"], "")
 
     def test_a_crew_can_set_its_own_budget(self):
         self.app.crews.update_team(self.tid, orchestration={"escalation": {"monthly_budget": 2}})

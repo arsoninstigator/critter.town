@@ -56,8 +56,9 @@ LADDER = (
 
 STATES = ("open", "answered", "defaulted", "withdrawn")
 
-# the target is a few a month. a crew over it is mis-scoped, and that is the finding.
-DEFAULT_MONTHLY_BUDGET = 5
+# there is no default ceiling. a crew that states a monthly_budget gets a finding when it passes it;
+# a crew that does not is reported its count and never called over, because a number nobody chose
+# would be critter.town's opinion of how often a person may be asked.
 
 # a default must be something the org can actually take. these words say it is waiting for a person
 # again, which is a loop and not a default.
@@ -95,12 +96,16 @@ class Escalations:
             raise NotFound(f"crew {team_id} not found")
         return (loads(row["orchestration"], {}) or {}).get("escalation") or {}
 
-    def budget(self, team_id: str) -> int:
-        value = self.policy(team_id).get("monthly_budget", DEFAULT_MONTHLY_BUDGET)
+    def budget(self, team_id: str) -> int | None:
+        """the crew's own ceiling, or None when it never stated one."""
+        value = self.policy(team_id).get("monthly_budget")
+        if value is None:
+            return None
         try:
-            return max(0, int(value))
+            number = int(value)
         except (TypeError, ValueError):
-            return DEFAULT_MONTHLY_BUDGET
+            return None
+        return number if number >= 0 else None
 
     def ladder(self, team_id: str) -> list[dict]:
         """the crew's own ladder when it set one, the default otherwise. never empty, never
@@ -355,7 +360,7 @@ class Escalations:
             "select count(*) as c from escalations where team_id = ? and month = ?",
             (team_id, month))["c"]
         budget = self.budget(team_id)
-        over = used > budget
+        over = budget is not None and used > budget
         return {"month": month, "used": used, "budget": budget, "over": over,
                 "finding": ("this crew is mis-scoped: it asked a person more than its budget "
                             "allows, so the work moved instead of getting done" if over else ""),

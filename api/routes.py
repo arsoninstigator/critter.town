@@ -419,6 +419,40 @@ def create_api(app: App | None = None) -> FastAPI:
     def card_statements(task_id: str) -> dict:
         return app.ledger.for_card(task_id)
 
+    # model capacity: the allowance a provider gives a key, spread across a crew's lanes
+    @api.post("/crews/{team_id}/lanes")
+    def connect_lane(team_id: str, body: dict) -> dict:
+        app.crews.get_team(team_id)
+        return app.capacity.connect(
+            team_id, body.get("label", ""), body.get("provider", ""), body.get("base_url", ""),
+            body.get("model", ""), body.get("token_env", ""), body.get("limits"),
+            body.get("weight", 1.0))
+
+    @api.get("/crews/{team_id}/lanes")
+    def list_lanes(team_id: str) -> dict:
+        app.crews.get_team(team_id)
+        return app.capacity.reading(team_id)
+
+    @api.post("/lanes/{lane_id}/limits")
+    def set_lane_limits(lane_id: str, body: dict) -> dict:
+        return app.capacity.set_limits(lane_id, body.get("limits"))
+
+    @api.post("/lanes/{lane_id}/state")
+    def set_lane_state(lane_id: str, body: dict) -> dict:
+        return app.capacity.set_state(lane_id, body.get("state", ""))
+
+    @api.get("/crews/{team_id}/lanes/pick")
+    def pick_lane(team_id: str, model: str | None = Query(None),
+                  need_tokens: int = Query(0)) -> dict:
+        app.crews.get_team(team_id)
+        return app.capacity.pick(team_id, model=model, need_tokens=need_tokens)
+
+    @api.get("/crews/{team_id}/lanes/share")
+    def lane_share(team_id: str, window: str = Query("day")) -> dict:
+        app.crews.get_team(team_id)
+        return {"team_id": team_id, "window": window,
+                "share": app.capacity.share(team_id, window=window)}
+
     # an escalation: four lines, a ladder, and the default taken if nobody answers
     @api.post("/agents/{agent_id}/escalations")
     def raise_escalation(agent_id: str, body: dict) -> dict:

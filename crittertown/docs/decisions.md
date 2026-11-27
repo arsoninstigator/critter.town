@@ -1061,3 +1061,22 @@ refusing the ask would hide the one thing worth fixing. `suspend_responsibility`
 clawcrew ladder, is left out on purpose: suspending a department's surfaces reaches into the org axis and
 deserves its own decision. myboard's risk-by-keyword was read and not taken, since critter.town already
 fails closed on what it cannot classify.
+
+## there is no default budget, and the real one is the provider's allowance across many keys
+
+the first escalation unit shipped a monthly budget of five. that number was critter.town's opinion of
+how often a person may be asked, and nobody chose it, so it was removed: an unset budget now means no
+budget and a crew is never called over one.
+
+the same instinct applies to models, and the owner's correction is the design. a crew connects its own
+api key, and the budget is whatever the provider gives that key (tokens a day, tokens a minute), spread
+across many keys and providers. critter.town holds no number of its own. a lane with no stated limit is
+uncapped, and a limit of zero is refused because it reads as unlimited and means the reverse.
+
+it is distributed because one key running dry should move the work and not stop the crew. a run takes the
+lane with the most room, a 429 cools a lane for the wait the provider stated, and a run that finds nothing
+usable parks through the environment-blocked path with no attempt spent, because the work did not fail.
+
+what is stored is what the provider returned. a call with no usage block is unmeasured and never given a
+guessed count, and an estimate is kept apart from a measurement so a figure never reads as the
+provider's word when it is ours. a key is only ever the name of a variable.

@@ -26,10 +26,12 @@ from core.config import Settings
 from agents.crews import CrewService
 from core.db import Store, dumps, loads, new_id, now
 from work import topology
-from core.errors import (CritterTownError, NotAllowed, NotFound, ProviderFailure,
+from core.errors import (CapacityExhausted, CritterTownError, NotAllowed, NotFound,
+                         ProviderFailure,
                          ProviderNotConfigured, ValidationError)
 from ingredients.projectmanagement.kanban.board import KanbanService
-from agents.runtime import AgentModel, answer_text, build_model, render_prompt
+from agents.runtime import (AgentModel, OpenAICompatibleModel, answer_text, build_model,
+                            render_prompt)
 from sandbox import Handle, ProviderRegistry
 
 # how many times a card may be handed to an environment that never started before it stops
@@ -54,6 +56,9 @@ class CrewRunner:
         self.registry = registry
         self.settings = settings
         self.model = model or build_model(settings)
+        # set by the composition root. with no lane connected nothing here changes: a crew with
+        # no allowance stated has no ceiling, and the global model answers exactly as before
+        self.capacity = None
         # set by the composition root: the crew's intent is read into every prompt
         self.intent = intent
         # set by the composition root: the standing limits, checked before a card
@@ -271,6 +276,22 @@ class CrewRunner:
                 # the work did not fail, the room did not open. spending an attempt on
                 # that charges the card for the environment's problem
                 return self._environment_blocked(task, agent, blocked, wake, reservation)
+            run_model = self.model
+            lane_used: dict | None = None
+            if self.capacity is not None and self.capacity.lanes(task["team_id"]):
+                chosen = self.capacity.pick(task["team_id"])
+                if chosen["lane"] is None:
+                    if handle is not None and provider is not None:
+                        try:
+                            provider.destroy(handle)
+                        except Exception:
+                            pass
+                    return self._environment_blocked(
+                        task, agent,
+                        CapacityExhausted(chosen["reason"], skipped=chosen["skipped"]),
+                        wake, reservation)
+                lane_used = chosen["lane"]
+                run_model = self._lane_model(lane_used, run_id)
             self._insert_run(run_id, task, agent, provider.name, handle.ref)
             if wake is not None:
                 self.wakes.delivered(wake["wake_id"], run_id)
@@ -309,7 +330,7 @@ class CrewRunner:
             )
             done = False
             for turn in range(1, max_turns + 1):
-                action = self.model.act(system_prompt, prompt)
+                action = run_model.act(system_prompt, prompt)
                 if self.guardrails is not None:
                     # the answer is checked before a command runs or a message leaves.
                     # a rail that fires afterwards is a report, not a rail.
@@ -578,6 +599,21 @@ class CrewRunner:
             "result": {},
             "error": "",
         }
+
+    def _lane_model(self, lane: dict, run_id: str):
+        """a model bound to one lane, reporting every call it makes back to the ledger. the key is
+        read from the variable the lane names at this moment and is never stored."""
+        import os
+        capacity = self.capacity
+        lane_id = lane["id"]
+
+        def report(call: dict) -> None:
+            capacity.record(lane_id, run_id, call.get("usage"), headers=call.get("headers"),
+                            status=int(call.get("status") or 200))
+
+        return OpenAICompatibleModel(
+            base_url=lane["base_url"], api_key=os.environ.get(lane["token_env"], ""),
+            model=lane["model"], on_call=report)
 
     def _environment_blocked(self, task: dict, agent: dict, exc: CritterTownError,
                              wake: dict | None, reservation: dict | None) -> dict:

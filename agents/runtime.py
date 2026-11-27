@@ -114,6 +114,9 @@ class OpenAICompatibleModel:
     model: str = "gpt-4.1-mini"
     max_tokens: int = 1200
     timeout: int = 120
+    # called once per call with what the provider said: the usage block, the response headers
+    # and the status. the model does not know what a lane is; whoever built it decides
+    on_call: Any = None
 
     def act(self, system_prompt: str, prompt: str) -> dict:
         if not self.base_url:
@@ -127,13 +130,28 @@ class OpenAICompatibleModel:
             "temperature": 0.2,
             "max_tokens": self.max_tokens,
         }
-        raw = request_json(
-            "POST",
-            self.base_url.rstrip("/") + "/chat/completions",
-            payload=payload,
-            headers={"authorization": f"Bearer {self.api_key}"},
-            timeout=self.timeout,
-        )
+        try:
+            raw, received = request_json(
+                "POST",
+                self.base_url.rstrip("/") + "/chat/completions",
+                payload=payload,
+                headers={"authorization": f"Bearer {self.api_key}"},
+                timeout=self.timeout,
+                with_headers=True,
+            )
+        except ProviderFailure as refused:
+            # a refusal still carries the provider's word on when to come back, and that has
+            # to reach whoever is tracking the allowance before the failure propagates
+            if self.on_call is not None:
+                # the provider's status lives in details: `status` on the exception is our own
+                # http answer (502), and reading that would make every refusal look the same
+                details = getattr(refused, "details", {}) or {}
+                self.on_call({"usage": None, "headers": details.get("headers") or {},
+                              "status": int(details.get("status") or 502)})
+            raise
+        if self.on_call is not None:
+            self.on_call({"usage": raw.get("usage") if isinstance(raw, dict) else None,
+                          "headers": received or {}, "status": 200})
         content = (
             raw.get("choices", [{}])[0].get("message", {}).get("content", "")
             if isinstance(raw, dict)

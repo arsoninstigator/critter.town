@@ -139,6 +139,12 @@ opens a gate with signed single-use tokens; the paper trail is the row, the ques
 travels to the crew channel, and one tap on the link decides it. links expire, are bound
 to one decision, and are refused after use. tables: `gates`, `gate_tokens`.
 
+### lane
+one connected model key: a provider, a base url, a model, and the name of the environment variable that
+carries the key (never the value). a lane's allowance is optional and is whatever its provider enforces,
+in tokens or requests per minute, hour or day. a lane with no stated allowance is uncapped and no
+number is supplied for it. a crew holds many lanes and a run takes the one with the most room.
+
 ### escalation
 a decision put to a person in four lines: what happened, what the org already tried, the decision
 needed, and the default it takes if nobody answers. one with no default is refused as a hostage note.

@@ -47,3 +47,11 @@ class ProviderNotConfigured(CritterTownError):
 class ProviderFailure(CritterTownError):
     code = "provider_failure"
     status = 502
+
+
+class CapacityExhausted(CritterTownError):
+    """every connected lane is cooling, spent, disabled or has no key. the work did not fail and the
+    room did open: the crew has nothing left to ask a model with right now, which is its own state."""
+
+    code = "capacity_exhausted"
+    status = 503

@@ -74,6 +74,7 @@ from work.phases import Phases
 from work.posture import Posture
 from org.axis import OrgAxis
 from org.escalations import Escalations
+from work.capacity import Capacity
 from work.silence import SilenceService
 from work.seats import SeatService
 from work.projects import ProjectService
@@ -154,6 +155,7 @@ class App:
     posture: Posture
     axis: OrgAxis
     escalations: Escalations
+    capacity: Capacity
     polls: PollService
     browsers: browser_layer.BrowserService
     ops: Any
@@ -313,6 +315,9 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     runner.axis = axis
     # a decision put to a person, with the default it takes if nobody answers
     escalations = Escalations(store, departments=departments, a2a=a2a, audit=audit)
+    # what a provider lets a key do, spread across the keys a crew connects. no default budget
+    capacity = Capacity(store, audit=audit)
+    runner.capacity = capacity
     # an eval reads the crew and the same model the runner uses, so a candidate is
     # measured against the prompt the crew would actually send
     evals = EvalService(store, crews=crews, model=runner.model)
@@ -519,6 +524,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         posture=posture,
         axis=axis,
         escalations=escalations,
+        capacity=capacity,
         polls=polls,
         browsers=browsers,
         ops=ops,

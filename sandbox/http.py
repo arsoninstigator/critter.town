@@ -18,7 +18,10 @@ def request_json(
     payload: dict | None = None,
     headers: dict | None = None,
     timeout: int = 60,
+    with_headers: bool = False,
 ) -> Any:
+    """`with_headers` returns (body, response_headers). it is opt in because a rate limit is
+    stated in headers and nowhere else, and every existing caller wants the body alone."""
     data = None
     hdrs = {"accept": "application/json", **{k: v for k, v in (headers or {}).items() if v}}
     if payload is not None:
@@ -28,16 +31,20 @@ def request_json(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read().decode("utf-8", "replace")
+            received = dict(resp.headers.items()) if with_headers else None
             if not body:
-                return {}
-            try:
-                return json.loads(body)
-            except ValueError:
-                return {"raw": body}
+                parsed: Any = {}
+            else:
+                try:
+                    parsed = json.loads(body)
+                except ValueError:
+                    parsed = {"raw": body}
+            return (parsed, received) if with_headers else parsed
     except urllib.error.HTTPError as exc:  # pragma: no cover - network
         detail = exc.read().decode("utf-8", "replace")[:2000]
         raise ProviderFailure(
-            f"{method} {url} failed with {exc.code}", status=exc.code, body=detail
+            f"{method} {url} failed with {exc.code}", status=exc.code, body=detail,
+            headers=dict(exc.headers.items()) if exc.headers else {}
         ) from exc
     except urllib.error.URLError as exc:  # pragma: no cover - network
         raise ProviderFailure(f"{method} {url} unreachable: {exc.reason}") from exc

@@ -860,3 +860,40 @@ named as the actor, the same rule the silence decisions follow. `app.tick()` run
 routes: `POST /agents/{id}/escalations`, `GET /crews/{id}/escalations`, `GET /crews/{id}/escalations/reading`,
 `POST /escalations/{id}/answer`, `POST /escalations/{id}/withdraw`, `POST /crews/{id}/escalations/tick`.
 schema 36 adds `escalations`.
+
+## model capacity: the allowance a provider gives a key, spread across a crew's lanes
+
+`work/capacity.py`. there is no default budget. critter.town invents no number: a crew connects a key
+and states what its provider allows, and that is the budget. the cents ledger in `work/budget.py` is
+unchanged and still covers money a caller knows; this covers what a provider actually enforces.
+
+`connect` records a lane (label, provider, base url, model, `token_env`, optional limits, weight). the
+key is the name of a variable and is read at the moment of the call. limits are
+`{"tokens": {"day": n, "minute": n}, "requests": {"minute": n}}`; a zero or negative number is refused
+because zero reads as unlimited and means the reverse, and leaving a limit out is how a lane says it has
+no cap. a lane with no limits is reported `uncapped` with `remaining: null`, never a large number.
+
+`record` stores one call as the provider reported it: the `usage` block (`prompt_tokens` and
+`completion_tokens`, or `input_tokens` and `output_tokens`). a call with no usage block is stored as
+unmeasured with zero tokens and never given a guessed count. an estimate is flagged `estimated` and
+`used` returns measured and estimated apart. a 429 cools the lane until the provider's stated wait
+(`retry-after`, or `x-ratelimit-reset-*` as `6m0s`, `1s`, `200ms`), falling back to 60 seconds only when
+nothing was stated, and a shorter later refusal never shortens an existing cooldown.
+
+`room` is the tightest window's remaining fraction, the window that decided named. `pick` takes the lane
+with the most room, a lane weight breaking a tie, skips and names a cooling, spent, disabled, wrong-model
+or keyless lane, and returns every reason instead of raising when nothing is usable.
+
+at dispatch, a crew with no lane connected runs exactly as before. a crew with lanes picks one before the
+turn loop, builds a model bound to it that reports every call back, and when no lane is usable parks the
+card through the same path an unopened environment uses: no attempt spent, the reservation released, and
+after `MAX_ENV_BLOCKS` the card blocks so a crew with every key dry stops asking.
+
+`request_json` gained an opt-in `with_headers` and `ProviderFailure` now carries the response headers in
+`details`. the provider's status is `details["status"]`; the exception's own `status` attribute is
+critter.town's http answer (502), and reading that would make every refusal look alike.
+
+routes: `POST|GET /crews/{id}/lanes`, `POST /lanes/{id}/limits`, `POST /lanes/{id}/state`,
+`GET /crews/{id}/lanes/pick`, `GET /crews/{id}/lanes/share`. schema 37 adds `model_lanes` and
+`model_calls`. the escalation count no longer has a default ceiling either: `monthly_budget` unset
+means no budget and a crew is never called over.

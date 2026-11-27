@@ -857,6 +857,38 @@ create table if not exists readable_checks (
 create index if not exists readable_checks_crew on readable_checks (team_id, created_date);
 create index if not exists readable_checks_run on readable_checks (run_id);
 
+-- v37: model capacity is the allowance a provider gives a key. there is no default budget: a lane is
+-- one connected key (the variable that carries it, never the value), its limits are optional, and what
+-- is measured is what the provider returned. estimated tokens are flagged apart from measured ones.
+create table if not exists model_lanes (
+    id text primary key,
+    team_id text not null references teams(id) on delete cascade,
+    label text not null,
+    provider text not null default 'unknown',
+    base_url text not null,
+    model text not null,
+    token_env text not null,
+    state text not null default 'active',
+    limits text not null default '{}',
+    cooling_until double precision not null default 0,
+    weight double precision not null default 1,
+    created_date double precision not null,
+    unique (team_id, label)
+);
+create table if not exists model_calls (
+    id text primary key,
+    team_id text not null,
+    lane_id text not null references model_lanes(id) on delete cascade,
+    run_id text,
+    tokens_in integer not null default 0,
+    tokens_out integer not null default 0,
+    measured integer not null default 0,
+    estimated integer not null default 0,
+    status integer not null default 200,
+    created_date double precision not null
+);
+create index if not exists model_calls_lane on model_calls (lane_id, created_date);
+
 -- v36: an escalation is a decision put to a person, with the four lines and the default it takes
 -- if nobody answers. a person answers it; the org takes the default and says so, as its own outcome.
 create table if not exists escalations (
