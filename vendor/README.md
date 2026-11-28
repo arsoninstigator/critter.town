@@ -1,6 +1,6 @@
 # vendored code
 
-these three packages are copies of permissively licensed upstream code, committed
+these packages are copies of permissively licensed upstream code, committed
 here so crittertown runs without shipping its own reimplementation of someone else's
 wire contract. nothing in this directory is ours: each package keeps its upstream
 `LICENSE` and a `PROVENANCE.md` naming the repository, the commit and the files.
@@ -14,6 +14,7 @@ is relative, so a rename touches no file's contents.
 | --- | --- | --- | --- |
 | `persistent_cloud_api` | [CelestoAI/celesto](https://github.com/CelestoAI/celesto) `src/_celesto_cloud_api` | Apache-2.0 | the client generated from `openapi/cloud.json` |
 | `ephemeral_cloud_api` | [e2b-dev/E2B](https://github.com/e2b-dev/E2B) `packages/python-sdk/e2b/api/client` | MIT | the client generated from `spec/openapi.yml` |
+| `relay_workspace` | [block/buzz](https://github.com/block/buzz) `55823dd` | Apache-2.0 | the relay and its whole rust workspace, untouched: 1795 files, each checked against `UPSTREAM_SHA256SUMS` |
 | `a2a_types` | [a2aproject/a2a-python](https://github.com/a2aproject/a2a-python) `src/a2a/compat/v0_3/types.py` + `src/a2a/_base.py` | Apache-2.0 | the pydantic models generated from the a2a json schema |
 
 ## why vendored instead of a dependency

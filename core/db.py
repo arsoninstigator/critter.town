@@ -18,7 +18,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 
 SCHEMA = """
 create table if not exists meta (
@@ -233,6 +233,10 @@ create table if not exists channels (
     slug text not null,
     purpose text not null default '',
     kind text not null default 'channel',
+    scope text not null default 'plain',
+    scope_id text,
+    state text not null default 'open',
+    closed_date real,
     created_date real not null,
     updated_date real not null,
     unique (team_id, slug)
@@ -1410,6 +1414,13 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
     "model_calls": {
         "model": "text not null default ''",
     },
+    # v39: a channel can mirror a piece of the org. its roster is then read off the org, never typed
+    "channels": {
+        "scope": "text not null default 'plain'",
+        "scope_id": "text",
+        "state": "text not null default 'open'",
+        "closed_date": "real",
+    },
     # v20: the lifecycle is a loop of scoped builds, so a project carries which build it is
     # on and the record of the ones that ended. closing v0 is how a business stops at v0.
     "projects": {
@@ -1527,6 +1538,10 @@ LATER_COLUMNS: dict[str, dict[str, str]] = {
 }
 
 LATER_INDEXES = (
+    # needs `scope`, which only exists after _add_columns on a db older than v39. one channel per
+    # piece of the org, so a reconcile that runs twice cannot make a second room
+    "create unique index if not exists channels_scope on channels (team_id, scope, scope_id) "
+    "where scope != 'plain'",
     # needs `model`, which only exists after _add_columns on a db older than v38
     "create index if not exists model_calls_model on model_calls (lane_id, model, created_date)",
     # needs `relation`, which only exists after _add_columns on a db older than v11

@@ -213,6 +213,10 @@ create table if not exists channels (
     slug text not null,
     purpose text not null default '',
     kind text not null default 'channel',
+    scope text not null default 'plain',
+    scope_id text,
+    state text not null default 'open',
+    closed_date double precision,
     created_date double precision not null,
     updated_date double precision not null,
     unique (team_id, slug)

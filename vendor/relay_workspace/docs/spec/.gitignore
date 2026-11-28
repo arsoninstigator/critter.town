@@ -1,0 +1,6 @@
+# TLC model-checker scratch output (fingerprint/state dirs, per-run), and the
+# TLC jar that check.sh downloads. Not part of the artifact.
+states/
+*.st
+*.fp
+tla2tools.jar

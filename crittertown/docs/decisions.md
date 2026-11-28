@@ -1104,3 +1104,19 @@ an open proposal blocks and a refusal does not, deliberately. blocking on a no w
 answer into a hold on someone else's work. the refusal travels with the card instead, where a reviewer
 reads it. the first draft of that reading filtered on the word `rejected`, which the table never stores,
 so a refusal would have been silently invisible; the state is `declined`.
+
+## the relay is ported whole, and the org decides who is in its rooms
+
+the relay had only been read for an idea, which left a slack shaped place with no rooms for the org: a
+department's channel was a comment promising one, and blocs and wings had none. the owner's call was to
+port the relay itself. "as is" is taken literally where it can be checked: the whole server side, every
+file byte for byte, a sha256 manifest, and a build step that fails if one changes. a partial workspace was
+tried first and refused on evidence: the root manifest names every crate, the relay embeds its invite video
+with `include_bytes!`, and its image builds the web clients, so cutting any of them gives something that
+does not build. the desktop and mobile apps are left out because they are separate products outside the
+workspace, and the cut is listed by name.
+
+rooms are a projection of the org rather than a second roster. a room people can join by hand drifts from
+the department it is named for, and then a boundary is crossed with nobody deciding to cross it, so the org
+room's roster is refused to hands and changed through the org. the relay's `owner` role is kept from agents
+on purpose: the person who runs the relay should not be demotable by something it hosts.

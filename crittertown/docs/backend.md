@@ -940,3 +940,39 @@ table that omits the requirement drops it.
 `GET /crews/{id}/org/proposals` takes `task_id` as well as `state`, so a card can list its own. the
 crew listing from `phases.for_crew` now also counts `open_proposals`. note the stored state for a no is
 `declined`, not `rejected`.
+
+## rooms that follow the org
+
+the relay is vendored whole in `vendor/relay_workspace` and run as its published image; `ingredients/relay/`
+is our half. a channel now has a `scope` (`crew`, `department`, `bloc`, `wing`, or `plain` for a room
+somebody opened by hand) and the `scope_id` of the piece of the org it mirrors, and a unique index allows
+one room per piece.
+
+an org room is a projection. `Rooms.plan(team)` reads the org and names every change that would make the
+rooms match, without touching anything; `Rooms.reconcile(team)` carries it out and a second run finds
+nothing to do. the rosters: everyone in the crew room, nobody leading it; a department's members with its
+coordinator as lead; a bloc's live grants, and the room closes and empties when the bloc closes or its
+grants lapse; every holder of a wing as lead, because a wing has a veto. a room whose department or wing is
+gone closes. a renamed department renames its room. an org room that collides with a hand made slug takes
+the next free one rather than a name somebody chose.
+
+because the roster is the org's, a hand made join or leave on an org room is refused (`NotAllowed`) with a
+sentence saying to change the department instead. a hand made room is untouched by any of this. a room's
+board is fenced the same way: a card on an org room names who raised it (`by`), and that must be a member
+or a person or the platform (`owner`, `system`, the scheduler); a closed room takes no new cards.
+
+our roles map onto the relay's: `lead` is the relay's `admin`, `member` is `member`, and nothing maps to the
+relay's `owner`, which stays with whoever runs the relay, so no agent can delete a room or demote that
+person. `GET /channels/{id}/relay-roster` reads the mapped roster.
+
+`GET /crews/{id}/rooms` is the overview: each room with its scope, roster, cards by column and its a2a
+traffic. a2a rows carry no channel, so a message is attributed by a rule the response states: it belongs to
+a room when its card is on that room's board, or when both its sender and its recipient are members. a note
+to the whole crew is attributed to no room, because guessing would put a private remark in a public one.
+also `GET /crews/{id}/rooms/plan` and `POST /crews/{id}/rooms/reconcile`. schema 39.
+
+### checking that a vendored tree is unchanged
+
+`make check` now runs `vendor-verify`. a tree carrying `UPSTREAM_SHA256SUMS` is compared file by file: an
+edited, deleted or added file, or a retargeted symlink, fails with its path. the small clients have no
+manifest, because their one change is a stated import rewrite.

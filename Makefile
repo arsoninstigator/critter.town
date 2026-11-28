@@ -1,4 +1,4 @@
-.PHONY: install test demo seed inspect serve vendor-audit check clean
+.PHONY: install test demo seed inspect serve vendor-audit vendor-verify check clean
 
 install:
 	pip install -e ".[dev]"
@@ -7,7 +7,7 @@ test:
 	cd crittertown/tests && python -m unittest discover -s . -p "test_*.py"
 
 # what a fresh machine should do before anyone believes the repo works
-check: vendor-audit test
+check: vendor-audit vendor-verify test
 
 demo:
 	python -m core.cli demo
@@ -23,6 +23,9 @@ serve:
 
 # every vendored package must keep its upstream licence and a provenance record,
 # otherwise the copy is unattributable and has no business being in the tree
+vendor-verify:
+	@python3 -m core.vendor_verify
+
 vendor-audit:
 	@checked=0; for d in vendor/*/; do \
 		case "$$(basename $$d)" in __pycache__) continue;; esac; \

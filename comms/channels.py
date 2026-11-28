@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.db import Store, dumps, loads, new_id, now
-from core.errors import Conflict, NotFound, ValidationError
+from core.errors import Conflict, NotAllowed, NotFound, ValidationError
 
 KINDS = {"channel", "dm", "dept"}
 ROLES = {"lead", "member"}
@@ -110,6 +110,10 @@ class ChannelService:
             "slug": row["slug"],
             "purpose": row["purpose"],
             "kind": row["kind"],
+            "scope": row["scope"],
+            "scope_id": row["scope_id"],
+            "state": row["state"],
+            "closed_date": row["closed_date"],
             "members": members,
             "lead_agent_id": next((m["agent_id"] for m in members if m["role"] == "lead"), None),
             "created_date": row["created_date"],
@@ -117,10 +121,25 @@ class ChannelService:
         }
 
     # ---- membership ----------------------------------------------------
-    def join(self, channel_id: str, agent_id: str, role: str = "member") -> dict:
+    def _guard_projection(self, channel: dict, _org: bool) -> None:
+        """a room that mirrors a piece of the org gets its roster from the org. a hand made join
+        would put someone in a department's room who is not in the department, which is a boundary
+        crossed with nobody deciding to cross it, so it is refused and the refusal says where to
+        make the change instead."""
+        if _org or channel.get("scope", "plain") == "plain":
+            return
+        raise NotAllowed(
+            f"this room mirrors a {channel['scope']}: its members come from the {channel['scope']}, "
+            f"so change the {channel['scope']} and the room follows",
+            scope=channel["scope"], scope_id=channel.get("scope_id"))
+
+    def join(self, channel_id: str, agent_id: str, role: str = "member", _org: bool = False) -> dict:
         if role not in ROLES:
             raise ValidationError(f"role must be one of {sorted(ROLES)}")
-        self.get(channel_id)
+        channel = self.get(channel_id)
+        self._guard_projection(channel, _org)
+        if channel.get("state") == "closed":
+            raise Conflict(f"channel {channel['slug']} is closed", state="closed")
         if not self.store.one("select id from agents where id = ?", (agent_id,)):
             raise NotFound(f"agent {agent_id} not found")
         with self.store.tx() as c:
@@ -132,7 +151,8 @@ class ChannelService:
             )
         return self.get(channel_id)
 
-    def leave(self, channel_id: str, agent_id: str) -> dict:
+    def leave(self, channel_id: str, agent_id: str, _org: bool = False) -> dict:
+        self._guard_projection(self.get(channel_id), _org)
         with self.store.tx() as c:
             c.execute(
                 "delete from channel_members where channel_id = ? and agent_id = ?",
@@ -236,13 +256,37 @@ class ChannelService:
         board = self.kanban.board(
             channel["team_id"], include_hidden=include_hidden, channel_id=channel_id
         )
-        board["channel"] = {k: channel[k] for k in ("id", "name", "slug", "purpose", "kind")}
+        board["channel"] = {k: channel[k] for k in ("id", "name", "slug", "purpose", "kind",
+                                                     "scope", "scope_id", "state")}
         board["members"] = channel["members"]
         return board
 
-    def create_task(self, channel_id: str, title: str, **fields: Any) -> dict:
-        """a card belongs to the room it was raised in."""
+    # actors that are not agents and may raise a card in any room: a person, and the platform's own
+    # loops. kept in step with the board's own list of named actors
+    SYSTEM_ACTORS = {"owner", "intake", "orchestrator", "saga", "scheduler", "system"}
+
+    def create_task(self, channel_id: str, title: str, by: str | None = None,
+                    **fields: Any) -> dict:
+        """a card belongs to the room it was raised in.
+
+        a room that mirrors the org fences its board: a card comes from someone in the room or from a
+        person or the platform, and a closed room takes none, because a bloc that ended and kept
+        collecting work would still be running. a room somebody opened by hand stays open to anyone
+        in the crew, as it always was."""
         channel = self.get(channel_id)
+        if channel.get("state") == "closed":
+            raise Conflict(f"channel {channel['slug']} is closed and takes no new cards",
+                           state="closed")
+        if channel.get("scope", "plain") != "plain":
+            members = {m["agent_id"] for m in channel["members"]}
+            if not by:
+                raise ValidationError(
+                    f"this room mirrors a {channel['scope']}, so a card names who raised it")
+            if by not in members and by not in self.SYSTEM_ACTORS:
+                raise NotAllowed(
+                    f"{by} is not in this {channel['scope']}'s room, so it cannot raise work on its "
+                    f"board: ask a member, or raise it in a room you are in",
+                    scope=channel["scope"], actor=by)
         fields.pop("channel_id", None)
         fields.pop("team_id", None)
         return self.kanban.create_task(

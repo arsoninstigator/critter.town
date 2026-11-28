@@ -73,6 +73,7 @@ from work.readable import Readable
 from work.phases import Phases
 from work.posture import Posture
 from org.axis import OrgAxis
+from ingredients.relay import Rooms
 from org.escalations import Escalations
 from work.capacity import Capacity
 from work.silence import SilenceService
@@ -154,6 +155,7 @@ class App:
     phases: Phases
     posture: Posture
     axis: OrgAxis
+    rooms: Rooms
     escalations: Escalations
     capacity: Capacity
     polls: PollService
@@ -313,6 +315,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
     # the second axis of the org chart: who owns a surface, who is on loan, who may veto
     axis = OrgAxis(store, departments=departments, kanban=kanban, audit=audit)
     runner.axis = axis
+    rooms = Rooms(store, channels)
     # a decision put to a person, with the default it takes if nobody answers
     escalations = Escalations(store, departments=departments, a2a=a2a, audit=audit)
     # what a provider lets a key do, spread across the keys a crew connects. no default budget
@@ -523,6 +526,7 @@ def build_app(settings: Settings | None = None, model: AgentModel | None = None)
         phases=phases,
         posture=posture,
         axis=axis,
+        rooms=rooms,
         escalations=escalations,
         capacity=capacity,
         polls=polls,

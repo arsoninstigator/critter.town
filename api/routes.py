@@ -33,6 +33,7 @@ from fastapi import Body, FastAPI, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from comms import human as a2a_human
+from ingredients.relay import overview
 from comms import protocol as a2a_spec
 from agents.agent_imports import AGENT_SOURCES, adopt, export_agent, import_agent
 from agents.context import SLICES
@@ -1008,11 +1009,28 @@ def create_api(app: App | None = None) -> FastAPI:
     def channel_board(channel_id: str) -> dict:
         return app.channels.board(channel_id)
 
+    # ---- rooms that follow the org -------------------------------------
+    @api.get("/crews/{team_id}/rooms")
+    def rooms_overview(team_id: str, recent: int = Query(5, ge=0, le=50)) -> dict:
+        return overview(app.store, team_id, recent=recent)
+
+    @api.get("/crews/{team_id}/rooms/plan")
+    def rooms_plan(team_id: str) -> dict:
+        return app.rooms.plan(team_id)
+
+    @api.post("/crews/{team_id}/rooms/reconcile")
+    def rooms_reconcile(team_id: str) -> dict:
+        return app.rooms.reconcile(team_id)
+
+    @api.get("/channels/{channel_id}/relay-roster")
+    def channel_relay_roster(channel_id: str) -> dict:
+        return app.rooms.relay_roster(channel_id)
+
     @api.post("/channels/{channel_id}/tasks")
     def channel_task(channel_id: str, payload: dict = Body(...)) -> dict:
         data = body(payload)
         title = data.pop("title", "")
-        return app.channels.create_task(channel_id, title, **data)
+        return app.channels.create_task(channel_id, title, by=data.pop("by", None), **data)
 
 
     # ---- comms: rooms whose members are agents, over a signed log ------

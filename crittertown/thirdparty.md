@@ -19,6 +19,7 @@ these are copies of upstream code under `vendor/`, each with its upstream `LICEN
 | persistent | [PersistentAI/celesto](https://github.com/PersistentAI/celesto) | Apache-2.0 | `src/_celesto_cloud_api`, the client generated from `openapi/cloud.json` | `ingredients/machines/persistent/client.py` |
 | ephemeral | [e2b-dev/E2B](https://github.com/e2b-dev/E2B) | MIT | `packages/python-sdk/e2b/api/client`, generated from `spec/openapi.yml` | `ingredients/machines/ephemeral/client.py` |
 | (wire types) | [a2aproject/a2a-python](https://github.com/a2aproject/a2a-python) | Apache-2.0 | `src/a2a/compat/v0_3/types.py` and `src/a2a/_base.py` | `comms/protocol.py` |
+| relay | [block/buzz](https://github.com/block/buzz) | Apache-2.0 | the server side of the whole workspace at `55823dd`, 1795 of its 7271 files, byte for byte: every rust crate, migrations, deploy, the web clients the relay serves. the desktop and mobile apps, benchmarks and screenshots are left out and listed by name in its `PROVENANCE.md`. `make vendor-verify` checks every file against a sha256 manifest | `ingredients/relay/` |
 
 ## baked in (ingredients), no code copied
 
@@ -50,7 +51,6 @@ interoperability, which is what users of an open tool actually need.
 | project | licence | what it changed here |
 | --- | --- | --- |
 | [paperclipai/paperclip](https://github.com/paperclipai/paperclip) | see their repo | the lifecycle an hmas needs: heartbeats as the only way an agent spends time, a wakeup that names its reason, atomic checkout where losing a race is a normal answer, and a delegation chain that traces an issue back to a goal. no code taken |
-| [block/buzz](https://github.com/block/buzz) | Apache-2.0 | the idea that agent conversation is its own channel with its own lifecycle, not task comments |
 | [a2aproject/A2A](https://github.com/a2aproject/A2A) | Apache-2.0 | the JSON-RPC binding and the review-gate extension |
 
 ## obligations we carry
