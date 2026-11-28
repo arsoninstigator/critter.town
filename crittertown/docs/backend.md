@@ -976,3 +976,17 @@ also `GET /crews/{id}/rooms/plan` and `POST /crews/{id}/rooms/reconcile`. schema
 `make check` now runs `vendor-verify`. a tree carrying `UPSTREAM_SHA256SUMS` is compared file by file: an
 edited, deleted or added file, or a retargeted symlink, fails with its path. the small clients have no
 manifest, because their one change is a stated import rewrite.
+
+### what a distribution carries
+
+the wheel and the platform image carry every vendored tree's licence and provenance, and the relay's
+manifest so a recipient can verify it, but none of the relay's rust. it is run as its own image, and the
+package finder walks into any directory, so left alone it packaged eighteen of upstream's python files
+(formal models, test helpers) as modules of ours. `pyproject.toml` excludes the tree and `.dockerignore`
+keeps all but those three records out of the context, which takes `/app/vendor` in the platform image from
+36M to 4.4M.
+
+this also fixed an older fault found on the way: the package-data globs were written from the repo root while
+setuptools reads them from the package, so the wheel had been shipping none of the vendored licences it says
+it carries. `test_packaging` builds a wheel from a clean copy and fails if a vendored tree loses its licence,
+if the rust is packaged, or if a docker ignore negation is placed before the pattern it carves out.

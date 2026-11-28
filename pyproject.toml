@@ -41,6 +41,13 @@ crittertown = "core.cli:main"
 [tool.setuptools.packages.find]
 include = ["core*", "api*", "agents*", "work*", "comms*", "org*", "manage*", "create*",
            "sandbox*", "ingredients*", "toolbox*", "workbench*", "infrastructure*", "vendor*"]
+# the relay is a rust workspace we run as its own image, not python we import. the finder walks into any
+# directory, and upstream ships python of its own (formal models, test helpers) that would otherwise be
+# packaged as if it were ours. its licence and provenance still travel, through package-data below
+exclude = ["vendor.relay_workspace*"]
 
 [tool.setuptools.package-data]
-vendor = ["vendor/*/LICENSE", "vendor/*/PROVENANCE.md", "vendor/README.md"]
+# globs are relative to the package directory, so these are written from vendor/ and not from the
+# repo root: the earlier form looked for vendor/vendor/*/LICENSE, matched nothing, and the wheel shipped
+# none of the vendored licences it promises to carry
+vendor = ["*/LICENSE", "*/PROVENANCE.md", "*/UPSTREAM_SHA256SUMS", "README.md"]

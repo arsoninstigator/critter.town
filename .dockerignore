@@ -14,3 +14,10 @@ demo_data/
 .env
 .pytest_cache/
 theidea/
+# the relay is built from its own context into its own image; the python platform never executes a line of
+# it, so carrying 36M of rust in every platform image would double its size for nothing. only its licence
+# and provenance records are kept, because the licence has to travel with every distribution
+vendor/relay_workspace/*
+!vendor/relay_workspace/LICENSE
+!vendor/relay_workspace/PROVENANCE.md
+!vendor/relay_workspace/UPSTREAM_SHA256SUMS
